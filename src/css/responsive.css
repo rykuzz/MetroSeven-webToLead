@@ -1,0 +1,79 @@
+@media (max-width: 992px) {
+    /* Tablet Styles */
+    .hero-container, .about-container {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .hero-text {
+        order: 2;
+        margin-top: 48px;
+    }
+    .hero-image-wrapper {
+        order: 1;
+        width: 100%;
+    }
+    .hero-subtitle {
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .hero-buttons, .hero-stats {
+        justify-content: center;
+    }
+
+    .programs-grid, .testimonials-grid, .contact-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Mobile Styles */
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.75rem; }
+
+    .nav-menu {
+        position: fixed;
+        left: -100%;
+        top: 73px;
+        flex-direction: column;
+        background-color: var(--white);
+        width: 100%;
+        height: 100vh;
+        text-align: center;
+        transition: 0.3s;
+        gap: 0;
+        padding-top: 2rem;
+        align-items: stretch;
+    }
+    
+    .nav-menu.active { 
+        left: 0; 
+    }
+    
+    .nav-item { 
+        padding: 1rem 0; 
+        width: 100%; 
+    }
+    .nav-link { font-size: 1.2rem; }
+    .nav-cta { display: none; } /* Hide register button on mobile, nav link is enough */
+    
+    .hamburger { 
+        display: flex; 
+        flex-direction: column; 
+        cursor: pointer; 
+        gap: 5px;
+    }
+    
+    .hamburger.active .bar:nth-child(2) { opacity: 0; }
+    .hamburger.active .bar:nth-child(1) { transform: translateY(8px) rotate(45deg); }
+    .hamburger.active .bar:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
+
+    .subscribe-form {
+        flex-direction: column;
+    }
+
+    .footer-container {
+        flex-direction: column;
+        gap: 16px;
+    }
+}

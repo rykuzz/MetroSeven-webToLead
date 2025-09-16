@@ -1,59 +1,85 @@
 const jsforce = require('jsforce');
 
-// Fungsi utama serverless
+// GET /api/salesforce-query?type=jurusan|sekolah|campus|intake&term=...
 module.exports = async (req, res) => {
-  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
+  if (req.method !== 'GET') {
+    return res.status(405).json({ message: 'Method not allowed. Gunakan GET.' });
+  }
 
-  // Buat koneksi baru
-  const conn = new jsforce.Connection({
-    loginUrl: SF_LOGIN_URL, // ← login URL dari env
-  });
+  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
+  const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
 
   try {
-    // Login dengan username + password + token
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // Ambil query parameter
     const { type, term } = req.query;
 
-    if (!term || term.length < 2) {
-      return res.status(400).json({ message: 'Kata kunci pencarian terlalu pendek' });
+    if (!type) {
+      return res.status(400).json({ message: 'Parameter "type" wajib diisi.' });
+    }
+    if (!term || String(term).trim().length < 2) {
+      return res.status(400).json({ message: 'Kata kunci pencarian terlalu pendek (min 2 huruf).' });
     }
 
-    // Escape tanda kutip
-    const sanitizedTerm = term.replace(/'/g, "\\'");
+    const q = String(term).replace(/'/g, "\\'");
+    let soql = '';
 
-    let soqlQuery = '';
-    if (type === 'jurusan') {
-      // Query Study Program
-      soqlQuery = `SELECT Id, Name 
-                   FROM Study_Program__c 
-                   WHERE Name LIKE '%${sanitizedTerm}%' 
-                   ORDER BY Name 
-                   LIMIT 10`;
-    } else if (type === 'sekolah') {
-      // Query Master School
-      soqlQuery = `SELECT NPSN__c, Name 
-                   FROM MasterSchool__c 
-                   WHERE Name LIKE '%${sanitizedTerm}%' 
-                   ORDER BY Name 
-                   LIMIT 10`;
-    } else {
-      return res.status(400).json({ message: 'Tipe query tidak valid. Gunakan "jurusan" atau "sekolah".' });
+    switch (type) {
+      case 'jurusan':
+        soql = `
+          SELECT Id, Name
+          FROM Study_Program__c
+          WHERE Name LIKE '%${q}%'
+          ORDER BY Name
+          LIMIT 10
+        `;
+        break;
+
+      case 'sekolah':
+        soql = `
+          SELECT Id, Name, NPSN__c
+          FROM MasterSchool__c
+          WHERE Name LIKE '%${q}%'
+          ORDER BY Name
+          LIMIT 10
+        `;
+        break;
+
+      case 'campus':
+        soql = `
+          SELECT Id, Name
+          FROM Campus__c
+          WHERE Name LIKE '%${q}%'
+          ORDER BY Name
+          LIMIT 10
+        `;
+        break;
+
+      case 'intake': // Tahun ajaran / Master Intake
+        soql = `
+          SELECT Id, Name
+          FROM Master_Intake__c
+          WHERE Name LIKE '%${q}%'
+          ORDER BY Name
+          LIMIT 10
+        `;
+        break;
+
+      default:
+        return res.status(400).json({
+          message: 'Tipe query tidak valid. Gunakan "jurusan", "sekolah", "campus", atau "intake".'
+        });
     }
 
-    // Jalankan query
-    const result = await conn.query(soqlQuery);
-
-    // Return hasil
+    const result = await conn.query(soql);
     res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
-    res.status(200).json(result);
+    return res.status(200).json(result);
 
   } catch (error) {
     console.error('Salesforce API Error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       message: 'Gagal mengambil data dari Salesforce',
       error: error.message,
-    });
-  }
+    });
+  }
 };

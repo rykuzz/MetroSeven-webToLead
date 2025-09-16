@@ -3,27 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Daftar — Metro Seven University</title>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <title>Form Pendaftaran</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/register-style.css" />
 </head>
 <body>
-  <main class="form-container" role="main">
-    <a class="btn-back" href="index.html" aria-label="Kembali ke halaman utama">← Kembali</a>
+  <main class="form-container">
+    <a class="btn-back" href="index.html">← Kembali</a>
 
-    <div class="form-logo">
-      <img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University" />
-    </div>
-
+    <div class="form-logo"><img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University" /></div>
     <header class="form-header">
       <h2>Form Pendaftaran</h2>
       <p>Lengkapi langkah-langkah di bawah ini untuk mendaftar.</p>
     </header>
 
-    <!-- Progress -->
-    <div class="wizard-progress" aria-hidden="true">
-      <div class="wizard-progress-bar" id="progressBar" style="width: 25%"></div>
+    <div class="wizard-progress">
+      <div class="wizard-progress-bar" id="progressBar" style="width:25%"></div>
       <div class="wizard-steps">
         <span class="wizard-step is-active" data-step="1">1. Data Pemohon</span>
         <span class="wizard-step" data-step="2">2. Preferensi Studi</span>
@@ -38,23 +33,21 @@
         <div class="form-grid">
           <div class="form-group">
             <label for="firstName">Nama Depan <span class="required-star">*</span></label>
-            <input id="firstName" name="firstName" class="form-control" placeholder="Contoh: Budi" required />
+            <input id="firstName" class="form-control" placeholder="Contoh: Budi" required />
           </div>
           <div class="form-group">
             <label for="lastName">Nama Belakang <span class="required-star">*</span></label>
-            <input id="lastName" name="lastName" class="form-control" placeholder="Contoh: Santoso" required />
+            <input id="lastName" class="form-control" placeholder="Contoh: Santoso" required />
           </div>
           <div class="form-group">
             <label for="email">Email <span class="required-star">*</span></label>
-            <input id="email" name="email" class="form-control" type="email" placeholder="Contoh: budi.santoso@email.com" required />
+            <input id="email" type="email" class="form-control" placeholder="nama@domain.com" required />
           </div>
-
-          <!-- Phone dengan prefix +62 (required) -->
           <div class="form-group">
             <label for="phone">No. HP <span class="required-star">*</span></label>
             <div class="phone-input">
               <span class="prefix">+62</span>
-              <input id="phone" name="phone" class="form-control phone-suffix" type="tel" placeholder="81234567890" required />
+              <input id="phone" class="form-control phone-suffix" type="tel" placeholder="81234567890" required />
             </div>
           </div>
         </div>
@@ -67,20 +60,20 @@
             <label for="program">Study Program <span class="required-star">*</span></label>
             <input id="program" class="form-control ac-input" placeholder="Cari jurusan, contoh: Informatika" autocomplete="off" required />
             <ul class="suggestions" id="programList" hidden></ul>
-            <input type="hidden" id="programId" name="studyProgramId" />
-            <input type="hidden" id="programName" name="studyProgramName" />
+            <input type="hidden" id="programId" />
+            <input type="hidden" id="programName" />
           </div>
           <div class="form-group">
             <label for="campus">Campus</label>
             <input id="campus" class="form-control ac-input" placeholder="Pilih kampus tujuan" autocomplete="off" />
             <ul class="suggestions" id="campusList" hidden></ul>
-            <input type="hidden" id="campusId" name="campusId" />
+            <input type="hidden" id="campusId" />
           </div>
           <div class="form-group">
             <label for="intake">Tahun Ajaran <span class="required-star">*</span></label>
             <input id="intake" class="form-control ac-input" placeholder="Contoh: 2025/2026 Ganjil" autocomplete="off" required />
             <ul class="suggestions" id="intakeList" hidden></ul>
-            <input type="hidden" id="intakeId" name="masterIntakeId" />
+            <input type="hidden" id="intakeId" />
           </div>
         </div>
       </section>
@@ -90,9 +83,10 @@
         <div class="form-grid">
           <div class="form-group full-width">
             <label for="school">Sekolah Asal</label>
-            <input id="school" class="form-control ac-input" placeholder="Cari nama sekolah, contoh: SMA Negeri 1 Jakarta" autocomplete="off" />
+            <input id="school" class="form-control ac-input" placeholder="Cari nama sekolah" autocomplete="off" />
             <ul class="suggestions" id="schoolList" hidden></ul>
-            <input type="hidden" id="schoolName" name="schoolName" />
+            <input type="hidden" id="schoolId" />   <!-- ⬅️ penting untuk MasterSchool__c -->
+            <input type="hidden" id="schoolName" />
             <div class="manual-trigger-group">
               <input type="checkbox" id="manualSchool" />
               <label for="manualSchool">Input manual bila sekolah tidak ditemukan</label>
@@ -104,7 +98,7 @@
           </div>
           <div class="form-group">
             <label for="graduationYear">Tahun Lulus</label>
-            <input id="graduationYear" name="graduationYear" class="form-control" type="number" min="1990" max="2100" placeholder="Contoh: 2023" />
+            <input id="graduationYear" class="form-control" type="number" min="1990" max="2100" placeholder="Contoh: 2025" />
           </div>
         </div>
       </section>
@@ -124,9 +118,9 @@
       </section>
 
       <!-- hidden tracking -->
-      <input type="hidden" id="campaignId" name="campaignId" />
+      <input type="hidden" id="campaignId" />
 
-      <!-- Wizard Nav -->
+      <!-- Nav -->
       <div class="wizard-nav">
         <button class="btn-secondary" type="button" id="btnPrev" disabled>Kembali</button>
         <button class="submit-btn" type="button" id="btnNext">Lanjut</button>
@@ -136,7 +130,6 @@
     </form>
   </main>
 
-  <!-- SCRIPT: pastikan letaknya di paling bawah -->
   <script src="js/register-script.js"></script>
 </body>
 </html>

@@ -28,7 +28,6 @@ document.addEventListener('DOMContentLoaded', function() {
         rootMargin: '0px 0px -50px 0px'
     });
 
-    // Terapkan class 'animate-in' ke elemen yang ingin dianimasikan
     const elementsToAnimate = document.querySelectorAll('.program-card, .testimonial-card, .contact-card, .hero-text, .hero-image-wrapper');
     elementsToAnimate.forEach(el => {
         el.classList.add('animate-in');

@@ -13,22 +13,21 @@ module.exports = async (req, res) => {
     await conn.login(SF_USERNAME, SF_PASSWORD);
     const b = req.body || {};
 
-    // 1) Ambil Record Types AVAILABLE → pilih "school"/"university"; fallback "person"
+    // 1) Ambil Record Types AVAILABLE di Account → pilih "school"/"university"; fallback "person"
     const desc = await conn.sobject('Account').describe();
     const rts  = (desc.recordTypeInfos || []).filter(rt => rt.available);
-
     const pickBy = (kw) =>
       rts.find(rt =>
         (rt.name || '').toLowerCase().includes(kw) ||
         (rt.developerName || '').toLowerCase().includes(kw)
       );
 
-    const want = String(b.accountType || '').toLowerCase(); // opsional: "school" | "university"
+    const want = String(b.accountType || '').toLowerCase();
     let chosen =
       (want && pickBy(want)) ||
       pickBy('school') ||
       pickBy('university') ||
-      pickBy('person'); // ← fallback aman: "Person Account"
+      pickBy('person'); // fallback aman: "Person Account"
 
     if (!chosen) {
       const avail = rts.map(rt => rt.name).join(', ');
@@ -39,9 +38,8 @@ module.exports = async (req, res) => {
     }
     const personRtId = chosen.recordTypeId;
 
-    // 2) Find-or-create Person Account by email (JANGAN set IsPersonAccount)
+    // 2) Find-or-create Person Account by email (tanpa IsPersonAccount)
     let accountId = null;
-
     if (b.email) {
       const emailEsc = String(b.email).replace(/'/g, "\\'");
       const q = await conn.query(`
@@ -57,7 +55,7 @@ module.exports = async (req, res) => {
           LastName : b.lastName  || '-',
           PersonEmail: b.email,
           PersonMobilePhone: b.phone || null,
-          ...(b.schoolId ? { Master_School__c: b.schoolId } : {}) // simpan sekolah (lookup)
+          ...(b.schoolId ? { MasterSchool__c: b.schoolId } : {})
         };
         await conn.sobject('Account').update(upd);
       }
@@ -65,31 +63,35 @@ module.exports = async (req, res) => {
 
     if (!accountId) {
       const acc = await conn.sobject('Account').create({
-        RecordTypeId: personRtId,            // → otomatis Person Account
+        RecordTypeId: personRtId, // → otomatis Person Account
         FirstName: b.firstName || '',
         LastName : b.lastName  || '-',
         PersonEmail: b.email,
         PersonMobilePhone: b.phone || null,
-        ...(b.schoolId ? { Master_School__c: b.schoolId } : {})
+        ...(b.schoolId ? { MasterSchool__c: b.schoolId } : {})
       });
       if (!acc.success) throw new Error(acc.errors?.join(', ') || 'Gagal membuat Person Account');
       accountId = acc.id;
     }
 
-    // 3) Create Opportunity (sekolah disimpan di Account)
+    // 3) Create Opportunity (StageName default "Booking Form")
     const closeDate = new Date(); closeDate.setDate(closeDate.getDate() + 30);
+
     const opp = await conn.sobject('Opportunity').create({
       Name: `REG - ${b.lastName || 'Applicant'} - ${b.studyProgramName || 'Program'}`,
-      StageName: 'Prospecting',
+      StageName: b.stageName || 'Booking Form',   // ⬅️ di sini
       CloseDate: closeDate.toISOString().slice(0, 10),
       AccountId: accountId,
+
       Study_Program__c: b.studyProgramId || null,
       Campus__c: b.campusId || null,
-      Master_Intake__c: b.masterIntakeId || null,   // Tahun Ajaran
+      Master_Intake__c: b.masterIntakeId || null, // Tahun Ajaran
       Graduation_Year__c: b.graduationYear || null,
+
       LeadSource: 'Metro Seven LP',
       CampaignId: b.campaignId || null
     });
+
     if (!opp.success) throw new Error(opp.errors?.join(', ') || 'Gagal membuat Opportunity');
 
     return res.status(200).json({ success: true, accountId, opportunityId: opp.id });

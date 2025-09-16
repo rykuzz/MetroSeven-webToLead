@@ -1,3 +1,4 @@
+// api/register.js
 const jsforce = require('jsforce');
 
 module.exports = async (req, res) => {
@@ -12,45 +13,33 @@ module.exports = async (req, res) => {
     await conn.login(SF_USERNAME, SF_PASSWORD);
     const b = req.body || {};
 
-    // -------------------------------------------------
-    // 1) Ambil RecordType yang AVAILABLE untuk Account,
-    //    lalu pilih yang namanya mengandung "university" atau "school"
-    //    (ini Person Account RT milikmu).
-    // -------------------------------------------------
+    // 1) Ambil Record Types AVAILABLE → pilih "school"/"university"; fallback "person"
     const desc = await conn.sobject('Account').describe();
-    const rts = (desc.recordTypeInfos || []).filter(rt => rt.available);
+    const rts  = (desc.recordTypeInfos || []).filter(rt => rt.available);
 
-    const pickByName = (needle) =>
+    const pickBy = (kw) =>
       rts.find(rt =>
-        (rt.name || '').toLowerCase().includes(needle) ||
-        (rt.developerName || '').toLowerCase().includes(needle)
+        (rt.name || '').toLowerCase().includes(kw) ||
+        (rt.developerName || '').toLowerCase().includes(kw)
       );
 
-    // Kamu bisa mengirim b.accountType = "university" | "school" dari frontend.
-    const want = String(b.accountType || '').toLowerCase();
+    const want = String(b.accountType || '').toLowerCase(); // opsional: "school" | "university"
     let chosen =
-      (want && pickByName(want)) ||
-      pickByName('university') ||
-      pickByName('school');
+      (want && pickBy(want)) ||
+      pickBy('school') ||
+      pickBy('university') ||
+      pickBy('person'); // ← fallback aman: "Person Account"
 
     if (!chosen) {
-      // Hindari pakai RT lain (berisiko Business). Lebih baik gagal dengan pesan jelas.
-      const available = rts.map(rt => rt.name).join(', ');
+      const avail = rts.map(rt => rt.name).join(', ');
       return res.status(500).json({
         success: false,
-        message:
-          `Record Type Person (University/School) tidak ditemukan/available untuk user integrasi. ` +
-          `Record Type available: ${available}`
+        message: `Tidak ada Record Type Person yang available untuk user integrasi. Tersedia: ${avail}`
       });
     }
-
     const personRtId = chosen.recordTypeId;
 
-    // -------------------------------------------------
-    // 2) Find-or-create Person Account by email
-    //    (JANGAN set IsPersonAccount; otomatis karena pakai Person RT)
-    //    Simpan lookup sekolah ke MasterSchool__c.
-    // -------------------------------------------------
+    // 2) Find-or-create Person Account by email (JANGAN set IsPersonAccount)
     let accountId = null;
 
     if (b.email) {
@@ -68,7 +57,7 @@ module.exports = async (req, res) => {
           LastName : b.lastName  || '-',
           PersonEmail: b.email,
           PersonMobilePhone: b.phone || null,
-          ...(b.schoolId ? { Master_School__c: b.schoolId } : {})
+          ...(b.schoolId ? { Master_School__c: b.schoolId } : {}) // simpan sekolah (lookup)
         };
         await conn.sobject('Account').update(upd);
       }
@@ -76,20 +65,18 @@ module.exports = async (req, res) => {
 
     if (!accountId) {
       const acc = await conn.sobject('Account').create({
-        RecordTypeId: personRtId,      // → otomatis Person Account
+        RecordTypeId: personRtId,            // → otomatis Person Account
         FirstName: b.firstName || '',
         LastName : b.lastName  || '-',
         PersonEmail: b.email,
         PersonMobilePhone: b.phone || null,
-        ...(b.schoolId ? { MasterSchool__c: b.schoolId } : {})
+        ...(b.schoolId ? { Master_School__c: b.schoolId } : {})
       });
       if (!acc.success) throw new Error(acc.errors?.join(', ') || 'Gagal membuat Person Account');
       accountId = acc.id;
     }
 
-    // -------------------------------------------------
-    // 3) Create Opportunity (sekolah sudah di Account)
-    // -------------------------------------------------
+    // 3) Create Opportunity (sekolah disimpan di Account)
     const closeDate = new Date(); closeDate.setDate(closeDate.getDate() + 30);
     const opp = await conn.sobject('Opportunity').create({
       Name: `REG - ${b.lastName || 'Applicant'} - ${b.studyProgramName || 'Program'}`,
@@ -106,6 +93,7 @@ module.exports = async (req, res) => {
     if (!opp.success) throw new Error(opp.errors?.join(', ') || 'Gagal membuat Opportunity');
 
     return res.status(200).json({ success: true, accountId, opportunityId: opp.id });
+
   } catch (error) {
     console.error('Register Error:', error);
     return res.status(500).json({ success: false, message: error.message });

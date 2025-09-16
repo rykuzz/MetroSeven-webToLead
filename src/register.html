@@ -80,7 +80,6 @@
             <label for="intake">Tahun Ajaran <span class="required-star">*</span></label>
             <input id="intake" class="form-control ac-input" placeholder="Contoh: 2025/2026 Ganjil" autocomplete="off" required />
             <ul class="suggestions" id="intakeList" hidden></ul>
-            <!-- tetap kirim sebagai masterIntakeId -->
             <input type="hidden" id="intakeId" name="masterIntakeId" />
           </div>
         </div>
@@ -129,7 +128,7 @@
 
       <!-- Wizard Nav -->
       <div class="wizard-nav">
-
+        <button class="btn-secondary" type="button" id="btnPrev" disabled>Kembali</button>
         <button class="submit-btn" type="button" id="btnNext">Lanjut</button>
       </div>
 
@@ -137,6 +136,7 @@
     </form>
   </main>
 
+  <!-- SCRIPT: pastikan letaknya di paling bawah -->
   <script src="js/register-script.js"></script>
 </body>
 </html>

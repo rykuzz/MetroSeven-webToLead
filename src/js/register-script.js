@@ -1,5 +1,5 @@
+// js/register-script.js
 document.addEventListener("DOMContentLoaded", () => {
-  // ---------- Mini helpers ----------
   const $  = (id) => document.getElementById(id);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -11,248 +11,173 @@ document.addEventListener("DOMContentLoaded", () => {
     steps: $$(".wizard-step"),
     formMsg: $("formMsg"),
   };
+  if (!el.btnNext || !el.btnPrev) return;
 
-  // Guard tombol
-  if (!el.btnNext || !el.btnPrev) {
-    console.error("ID tombol tidak ditemukan. Pastikan id='btnNext' & id='btnPrev' ada di HTML.");
-    return;
-  }
+  // utils
+  async function getJSON(url){ const r=await fetch(url); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+  function validateEmail(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e).toLowerCase()); }
+  function formatPhone(num){ if(!num) return ""; let s=num.replace(/\D/g,""); if(s.startsWith("0")) s=s.slice(1); return s; }
 
-  // ---------- Utils ----------
-  async function getJSON(url){
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(await r.text());
-    return r.json();
-  }
-  function validateEmail(email) {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(String(email).toLowerCase());
-  }
-  function formatPhone(num) {
-    if (!num) return "";
-    // digit only
-    let clean = num.replace(/\D/g, "");
-    // hapus 0 pertama supaya +62 tidak jadi +6208...
-    if (clean.startsWith("0")) clean = clean.slice(1);
-    return clean;
-  }
+  // keep digits only while typing phone
+  $("phone")?.addEventListener("input", () => {
+    $("phone").value = $("phone").value.replace(/\D/g,"");
+  });
 
-  // (opsional) realtime sanitasi phone input (hanya digit)
-  const phoneEl = $("phone");
-  if (phoneEl) {
-    phoneEl.addEventListener("input", () => {
-      const digits = phoneEl.value.replace(/\D/g, "");
-      phoneEl.value = digits; // keep digits only di UI
+  // wizard state
+  let currentStep = 1; const maxStep = 4;
+  function updateProgress(){
+    el.progressBar.style.width = (currentStep/maxStep*100) + "%";
+    el.steps.forEach(s=>{
+      const n=+s.dataset.step;
+      s.classList.toggle("is-active", n===currentStep);
+      s.classList.toggle("is-done",   n< currentStep);
     });
   }
-
-  // ---------- Wizard state ----------
-  let currentStep = 1;
-  const maxStep = 4;
-
-  function updateProgress() {
-    const pct = (currentStep / maxStep) * 100;
-    el.progressBar.style.width = pct + "%";
-    el.steps.forEach(s => {
-      const step = Number(s.dataset.step);
-      s.classList.toggle("is-active", step === currentStep);
-      s.classList.toggle("is-done", step < currentStep);
-    });
-  }
-  function showStep(step) {
-    currentStep = Math.max(1, Math.min(maxStep, step));
-    el.panels.forEach(p => { p.hidden = Number(p.dataset.step) !== currentStep; });
-    el.btnPrev.disabled = currentStep === 1;
-    el.btnNext.textContent = currentStep === maxStep ? "Kirim" : "Lanjut";
+  function showStep(n){
+    currentStep = Math.max(1, Math.min(maxStep, n));
+    el.panels.forEach(p=> p.hidden = (+p.dataset.step!==currentStep));
+    el.btnPrev.disabled = currentStep===1;
+    el.btnNext.textContent = currentStep===maxStep ? "Kirim" : "Lanjut";
     updateProgress();
-    if (currentStep === 4) renderReview();
+    if (currentStep===4) renderReview();
   }
 
-  // ---------- Validasi per step ----------
-  function validStep1() {
-    const first = $("firstName").value.trim();
-    const last  = $("lastName").value.trim();
-    const email = $("email").value.trim();
-    const phoneRaw = $("phone").value.trim();
-
-    if (!first || !last || !email || !phoneRaw) {
-      el.formMsg.textContent = "Nama depan, nama belakang, email, dan no. HP wajib diisi.";
-      return false;
-    }
-    if (!validateEmail(email)) {
-      el.formMsg.textContent = "Format email tidak valid.";
-      return false;
-    }
-    const formatted = formatPhone(phoneRaw);
-    if (formatted.length < 9) {
-      el.formMsg.textContent = "Nomor HP minimal 9 digit setelah +62.";
-      return false;
-    }
-    el.formMsg.textContent = "";
-    return true;
+  // validations
+  function validStep1(){
+    const first=$("firstName").value.trim();
+    const last =$("lastName").value.trim();
+    const email=$("email").value.trim();
+    const phone=$("phone").value.trim();
+    if(!first||!last||!email||!phone){ el.formMsg.textContent="Nama, email, dan no. HP wajib diisi."; return false; }
+    if(!validateEmail(email)){ el.formMsg.textContent="Format email tidak valid."; return false; }
+    if(formatPhone(phone).length<9){ el.formMsg.textContent="Nomor HP minimal 9 digit setelah +62."; return false; }
+    el.formMsg.textContent=""; return true;
   }
-  function validStep2() {
-    if (!$("programId").value) {
-      el.formMsg.textContent = "Pilih Study Program dari daftar.";
-      return false;
-    }
-    if (!$("intakeId").value) {
-      el.formMsg.textContent = "Pilih Tahun Ajaran dari daftar.";
-      return false;
-    }
-    el.formMsg.textContent = "";
-    return true;
+  function validStep2(){
+    if(!$("programId").value){ el.formMsg.textContent="Pilih Study Program dari daftar."; return false; }
+    if(!$("intakeId").value){ el.formMsg.textContent="Pilih Tahun Ajaran dari daftar."; return false; }
+    el.formMsg.textContent=""; return true;
   }
-  function validStep3() {
-    if ($("manualSchool")?.checked && !$("manualSchoolInput").value.trim()) {
-      el.formMsg.textContent = "Isi Nama Sekolah (input manual).";
-      return false;
+  function validStep3(){
+    if($("manualSchool")?.checked && !$("manualSchoolInput").value.trim()){
+      el.formMsg.textContent="Isi Nama Sekolah (input manual)."; return false;
     }
-    el.formMsg.textContent = "";
-    return true;
+    el.formMsg.textContent=""; return true;
   }
-  function validStep4() {
-    if (!$("consentCheck").checked) {
-      el.formMsg.textContent = "Mohon setujui kebijakan privasi.";
-      return false;
-    }
-    el.formMsg.textContent = "";
-    return true;
+  function validStep4(){
+    if(!$("consentCheck").checked){ el.formMsg.textContent="Mohon setujui kebijakan privasi."; return false; }
+    el.formMsg.textContent=""; return true;
   }
 
-  // ---------- Review ----------
-  function renderReview() {
+  // review
+  function renderReview(){
     const data = collectPayload(false);
     const rows = [
-      ["Nama", `${data.firstName || ""} ${data.lastName || ""}`.trim()],
-      ["Email", data.email || "-"],
-      ["No. HP", data.phone || "-"],
-      ["Study Program", data.studyProgramName || "-"],
-      ["Campus", $("campus").value || "-"],
-      ["Tahun Ajaran", $("intake").value || "-"],
-      ["Sekolah", data.schoolName || "-"],
-      ["Tahun Lulus", data.graduationYear || "-"]
+      ["Nama", `${data.firstName||""} ${data.lastName||""}`.trim()],
+      ["Email", data.email||"-"],
+      ["No. HP", data.phone||"-"],
+      ["Study Program", data.studyProgramName||"-"],
+      ["Campus", $("campus").value||"-"],
+      ["Tahun Ajaran", $("intake").value||"-"],
+      ["Sekolah", $("manualSchool")?.checked ? $("manualSchoolInput").value : ($("schoolName").value || $("school").value) || "-"],
+      ["Tahun Lulus", data.graduationYear||"-"]
     ];
     $("reviewContent").innerHTML = rows.map(([k,v]) =>
       `<div class="review-row"><div class="review-key">${k}</div><div class="review-val">${v}</div></div>`
     ).join("");
   }
 
-  // ---------- Autocomplete ----------
-  function buildMenu(inputEl, listEl, items, onChoose) {
-    listEl.innerHTML = "";
-    const list = items.records || items;
-    if (!list || list.length === 0) { listEl.hidden = true; return; }
-    list.forEach(it => {
-      const li = document.createElement("li");
+  // autocomplete
+  function buildMenu(inputEl, listEl, items, onChoose){
+    listEl.innerHTML="";
+    const list = items.records||items;
+    if(!list||!list.length){ listEl.hidden=true; return; }
+    list.forEach(it=>{
+      const li=document.createElement("li");
       li.textContent = it.Name || it.name;
-      li.onclick = () => { inputEl.value = it.Name || it.name; onChoose(it); listEl.hidden = true; };
+      li.onclick = ()=>{ inputEl.value = it.Name||it.name; onChoose(it); listEl.hidden=true; };
       listEl.appendChild(li);
     });
-    listEl.hidden = false;
+    listEl.hidden=false;
   }
   function wireAutocomplete(inputId, listId, type, onPicked){
-    const input=document.getElementById(inputId);
-    const list =document.getElementById(listId);
-    if (!input || !list) return;
+    const input=$(inputId); const list=$(listId);
+    if(!input||!list) return;
     let t;
     input.addEventListener("input", ()=>{
-      const q=input.value.trim(); if(q.length<2){ list.hidden=true; return;}
+      const q=input.value.trim(); if(q.length<2){ list.hidden=true; return; }
       clearTimeout(t);
-      t=setTimeout(async()=>{
-        try {
-          // PANGGIL endpoint GET autocomplete
+      t=setTimeout(async ()=>{
+        try{
           const data = await getJSON(`/api/salesforce-query?type=${encodeURIComponent(type)}&term=${encodeURIComponent(q)}`);
-          buildMenu(input, list, data, (it)=> onPicked(it));
-        } catch (e) {
-          console.error(e);
-          list.hidden = true;
-        }
+          buildMenu(input, list, data, onPicked);
+        }catch(e){ console.error(e); list.hidden=true; }
       }, 250);
     });
-    document.addEventListener("click",(e)=>{ if(!list.contains(e.target) && e.target!==input) list.hidden=true; });
+    document.addEventListener("click",(e)=>{ if(!list.contains(e.target)&&e.target!==input) list.hidden=true; });
   }
 
-  // Pasang wiring
+  // wiring lookups
   wireAutocomplete("program","programList","jurusan",(it)=>{ $("programId").value=it.Id; $("programName").value=it.Name; });
   wireAutocomplete("campus","campusList","campus",(it)=>{ $("campusId").value=it.Id; });
   wireAutocomplete("intake","intakeList","intake",(it)=>{ $("intakeId").value=it.Id; });
-  wireAutocomplete("school","schoolList","sekolah",(it)=>{ $("schoolName").value=it.Name; });
+  wireAutocomplete("school","schoolList","sekolah",(it)=>{ $("schoolId").value=it.Id; $("schoolName").value=it.Name; $("school").value=it.Name; });
 
-  // Manual school toggle
+  // manual school toggle
   $("manualSchool")?.addEventListener("change",(e)=>{
     $("manualSchoolBox").hidden = !e.target.checked;
-    if (e.target.checked) {
-      $("school").value = "";
-      $("schoolName").value = "";
-      $("manualSchoolInput").focus();
+    if(e.target.checked){
+      $("school").value=""; $("schoolId").value=""; $("schoolName").value=""; $("manualSchoolInput").focus();
     }
   });
 
-  // Campaign from URL (?cmp=701xxx)
+  // campaign from URL (?cmp=701xxx)
   (()=>{ const u=new URLSearchParams(location.search); const cmp=u.get("cmp"); if(cmp) $("campaignId").value=cmp; })();
 
-  // ---------- Payload ----------
+  // payload
   function collectPayload(){
-    const rawPhone = $("phone").value.trim();
-    const formattedPhone = rawPhone ? formatPhone(rawPhone) : null;
-
+    const phone = $("phone").value.trim();
+    const normalized = formatPhone(phone);
     return {
       firstName: $("firstName").value.trim(),
       lastName : $("lastName").value.trim() || "-",
       email    : $("email").value.trim(),
-      phone    : formattedPhone ? `+62${formattedPhone}` : null,
-
+      phone    : normalized ? `+62${normalized}` : null,
       studyProgramId: $("programId").value || null,
       studyProgramName: $("programName").value || null,
       campusId: $("campusId").value || null,
-
-      // label UI "Tahun Ajaran", tapi backend tetap `masterIntakeId`
       masterIntakeId: $("intakeId").value || null,
-
-      schoolName: $("manualSchool")?.checked
-        ? $("manualSchoolInput").value.trim()
-        : ($("schoolName").value || $("school").value.trim() || null),
-
+      schoolId: $("schoolId").value || null, // untuk Account.MasterSchool__c
+      schoolName: $("manualSchool")?.checked ? $("manualSchoolInput").value.trim()
+                 : ($("schoolName").value || $("school").value.trim() || null),
       graduationYear: $("graduationYear").value ? Number($("graduationYear").value) : null,
       campaignId: $("campaignId").value || null
     };
   }
 
-  // ---------- Nav & Submit ----------
-  el.btnPrev.addEventListener("click",()=> showStep(currentStep-1));
+  // nav & submit
+  el.btnPrev.addEventListener("click", ()=> showStep(currentStep-1));
   el.btnNext.addEventListener("click", async ()=>{
-    if (currentStep===1 && !validStep1()) return;
-    if (currentStep===2 && !validStep2()) return;
-    if (currentStep===3 && !validStep3()) return;
+    if(currentStep===1 && !validStep1()) return;
+    if(currentStep===2 && !validStep2()) return;
+    if(currentStep===3 && !validStep3()) return;
 
-    if (currentStep < 4) { showStep(currentStep + 1); return; }
-    if (!validStep4()) return;
+    if(currentStep<4){ showStep(currentStep+1); return; }
+    if(!validStep4()) return;
 
-    el.btnNext.disabled = true; el.btnNext.textContent = "Mengirim…";
-    el.formMsg.textContent = "";
-
-    try {
+    el.btnNext.disabled=true; el.btnNext.textContent="Mengirim…"; el.formMsg.textContent="";
+    try{
       const payload = collectPayload();
-      const res = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type":"application/json" },
-        body: JSON.stringify(payload)
-      });
-      const json = await res.json();
-      if (json.success) {
-        window.location.href = "thankyou.html";
-      } else {
-        el.formMsg.textContent = "Gagal: " + (json.error || json.message || "Unknown");
-        el.btnNext.disabled = false; el.btnNext.textContent = "Kirim";
-      }
-    } catch (e) {
-      console.error(e);
-      el.formMsg.textContent = "Terjadi kesalahan jaringan. Coba lagi.";
-      el.btnNext.disabled = false; el.btnNext.textContent = "Kirim";
+      const r = await fetch("/api/register", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if(j.success){ window.location.href="thankyou.html"; }
+      else{ el.formMsg.textContent = "Gagal: " + (j.message || j.error || "Unknown"); el.btnNext.disabled=false; el.btnNext.textContent="Kirim"; }
+    }catch(e){
+      console.error(e); el.formMsg.textContent="Terjadi kesalahan jaringan. Coba lagi.";
+      el.btnNext.disabled=false; el.btnNext.textContent="Kirim";
     }
   });
 
-  // Init
+  // init
   showStep(1);
 });

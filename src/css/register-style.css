@@ -1,4 +1,4 @@
-/* Reset & Base Styles */
+/* Root Variables */
 :root {
   --primary-color: #3498db;
   --primary-hover: #2980b9;
@@ -6,9 +6,12 @@
   --text-dark: #2c3e50;
   --text-light: #7f8c8d;
   --white: #fff;
+  --success: #10b981;
+  --danger: #e74c3c;
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Reset */
+* { margin: 0; padding: 0; box-sizing: border-box; }
 body {
   font-family: 'Poppins', sans-serif;
   display: flex;
@@ -17,79 +20,179 @@ body {
   min-height: 100vh;
   padding: 20px;
   position: relative;
+  background: #f9fafb;
 }
 
-/* EFEK LATAR BELAKANG BLURRY */
+/* Background blur effect */
 body::before {
-    content: '';
-    position: fixed;
-    top: -20px; right: -20px; bottom: -20px; left: -20px;
-    z-index: -1;
-    background-image: url('../assets/images/HeroImage-MetroSeven.png');
-    background-size: cover;
-    background-position: center;
-    filter: blur(8px);
-    -webkit-filter: blur(8px);
+  content: '';
+  position: fixed;
+  top: -20px; right: -20px; bottom: -20px; left: -20px;
+  z-index: -1;
+  background-image: url('../assets/images/HeroImage-MetroSeven.png');
+  background-size: cover;
+  background-position: center;
+  filter: blur(8px);
+  -webkit-filter: blur(8px);
 }
 body::after {
-    content: '';
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: -1;
-    background-color: rgba(255, 255, 255, 0.5);
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  background-color: rgba(255, 255, 255, 0.5);
 }
 
-/* Form Container */
+/* Container */
 .form-container {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(5px);
   padding: 40px;
-  border-radius: 12px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 10px 30px rgba(0,0,0,.2);
   width: 100%;
-  max-width: 600px;
+  max-width: 700px;
 }
 
-/* Tombol Kembali & Logo */
-.btn-back { display: inline-block; margin-bottom: 25px; font-weight: 500; color: var(--text-light); text-decoration: none; transition: color 0.2s ease; }
+/* Header */
+.btn-back { 
+  display: inline-block; 
+  margin-bottom: 25px; 
+  font-weight: 500; 
+  color: var(--text-light); 
+  text-decoration: none; 
+  transition: color 0.2s ease; 
+}
 .btn-back:hover { color: var(--primary-color); }
 .form-logo { text-align: center; margin-bottom: 25px; }
 .form-logo img { max-width: 150px; height: auto; }
 
-.form-header h2 { text-align: center; margin-bottom: 8px; color: var(--text-dark); }
-.form-header p { text-align: center; margin-bottom: 30px; color: var(--text-light); font-size: 14px; }
+.form-header h2 { 
+  text-align: center; 
+  margin-bottom: 8px; 
+  color: var(--text-dark); 
+}
+.form-header p { 
+  text-align: center; 
+  margin-bottom: 30px; 
+  color: var(--text-light); 
+  font-size: 14px; 
+}
 
-/* Form Grid & Groups */
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+/* Grid */
+.form-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 20px; 
+}
 .form-group { margin-bottom: 20px; position: relative; }
 .form-group.full-width { grid-column: 1 / -1; }
 
-/* Form Elements */
+/* Form elements */
 label { display: block; font-weight: 500; margin-bottom: 8px; color: var(--text-dark); }
-.required-star { color: #e74c3c; }
-.form-control { width: 100%; padding: 12px 15px; font-size: 16px; font-family: 'Poppins', sans-serif; border: 1px solid var(--border-color); border-radius: 8px; background: #fdfdfd; transition: all 0.2s ease-in-out; }
-.form-control:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(52,152,219,0.2); }
+.required-star { color: var(--danger); }
+.form-control {
+  width: 100%; padding: 12px 15px; font-size: 16px;
+  font-family: 'Poppins', sans-serif;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #fdfdfd;
+  transition: all 0.2s ease-in-out;
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(52,152,219,0.2);
+}
 .form-control:disabled { background-color: #ececec; cursor: not-allowed; }
 
-/* Suggestions Autocomplete */
-.suggestions { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-color); border-radius: 8px; max-height: 220px; overflow-y: auto; position: absolute; top: 100%; left: 0; right: 0; background: var(--white); z-index: 100; box-shadow: 0 8px 16px rgba(0,0,0,.1); }
+/* Autocomplete suggestions */
+.suggestions {
+  list-style: none;
+  margin: 0; padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  position: absolute;
+  top: 100%; left: 0; right: 0;
+  background: var(--white);
+  z-index: 100;
+  box-shadow: 0 8px 16px rgba(0,0,0,.1);
+}
 .suggestions li { padding: 10px 15px; cursor: pointer; }
-.suggestions li:hover, .suggestions li.selected { background: var(--primary-color); color: var(--white); }
+.suggestions li:hover, .suggestions li.selected { 
+  background: var(--primary-color); 
+  color: var(--white); 
+}
 
-/* Checkbox untuk input manual */
+/* Checkbox & manual input */
 .manual-trigger-group { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .manual-trigger-group label { margin: 0; font-size: 14px; color: var(--text-dark); font-weight: 500; cursor: pointer; }
-
-/* Kontainer input manual */
 .other-school-container { background-color: rgba(248, 249, 250, 0.8); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-top: -10px; margin-bottom: 20px; }
 .manual-input-header { font-size: 14px; font-weight: 500; color: var(--text-dark); margin-bottom: 16px; }
 
-/* Submit Button */
-.submit-btn { width: 100%; padding: 15px; background: var(--primary-color); color: var(--white); border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 16px; transition: background-color 0.2s ease; }
+/* Phone input (+62 prefix) */
+.phone-input {
+  display: flex; align-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #fdfdfd;
+  overflow: hidden;
+}
+.phone-input .prefix {
+  background: #f3f4f6;
+  padding: 0 12px;
+  color: var(--text-dark);
+  font-weight: 500;
+  border-right: 1px solid var(--border-color);
+}
+.phone-input .phone-suffix {
+  border: none; flex: 1; padding: 12px; font-size: 16px; font-family: 'Poppins', sans-serif;
+}
+.phone-input .phone-suffix:focus { outline: none; box-shadow: none; }
+
+/* Submit buttons */
+.submit-btn {
+  padding: 14px 24px;
+  background: var(--primary-color);
+  color: var(--white);
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.2s ease;
+}
 .submit-btn:hover { background: var(--primary-hover); }
+.btn-secondary {
+  background:#f3f4f6; color:#111827;
+  border:1px solid #e5e7eb;
+  border-radius:12px; padding:12px 16px;
+  font-weight:600; cursor:pointer
+}
+.btn-secondary:disabled {opacity:.6;cursor:not-allowed}
+
+/* Wizard progress */
+.wizard-progress {position:relative;margin:10px 0 24px;background:#eef2ff;border-radius:999px;height:8px}
+.wizard-progress-bar {height:8px;background:var(--primary-color);border-radius:999px;width:25%;transition:width .25s}
+.wizard-steps {display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text-light)}
+.wizard-step.is-active {color: var(--primary-color);font-weight:700}
+.wizard-step.is-done {color: var(--success)}
+.wizard-nav {display:flex;gap:12px;margin-top:14px}
+
+/* Review box */
+.review-box {border:1px solid var(--border-color);border-radius:12px;padding:16px;background:#fff}
+.review-grid {display:grid;grid-template-columns:180px 1fr;gap:10px 16px}
+.review-row {display:contents}
+.review-key {font-weight:600;color:#374151}
+.review-val {color:#111827}
+.consent {margin-top:16px}
+.checkbox {display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#374151}
+.checkbox input {margin-top:3px}
 
 /* Debug */
 .debug-info { margin-top: 24px; font-size: 12px; color: var(--text-light); white-space: pre-wrap; background: #f0f0f0; padding: 10px; border-radius: 4px; }
@@ -98,4 +201,5 @@ label { display: block; font-weight: 500; margin-bottom: 8px; color: var(--text-
 @media (max-width: 600px) {
   .form-grid { grid-template-columns: 1fr; }
   .form-container { padding: 25px; }
+  .review-grid { grid-template-columns: 1fr; }
 }

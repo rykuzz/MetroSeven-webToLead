@@ -54,7 +54,7 @@ module.exports = async (req, res) => {
           FirstName: b.firstName || '',
           LastName : b.lastName  || '-',
           PersonEmail: b.email,
-          PersonMobilePhone: b.phone || null,
+          Phone: b.phone || null,
           ...(b.schoolId ? { Master_School__c: b.schoolId } : {})
         };
         await conn.sobject('Account').update(upd);
@@ -67,7 +67,7 @@ module.exports = async (req, res) => {
         FirstName: b.firstName || '',
         LastName : b.lastName  || '-',
         PersonEmail: b.email,
-        PersonMobilePhone: b.phone || null,
+        Phone: b.phone || null,
         ...(b.schoolId ? { Master_School__c: b.schoolId } : {})
       });
       if (!acc.success) throw new Error(acc.errors?.join(', ') || 'Gagal membuat Person Account');
@@ -101,4 +101,5 @@ module.exports = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 

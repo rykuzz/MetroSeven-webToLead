@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // ---------- Helpers ----------
+  // ---------- Mini helpers ----------
   const $  = (id) => document.getElementById(id);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -12,12 +12,13 @@ document.addEventListener("DOMContentLoaded", () => {
     formMsg: $("formMsg"),
   };
 
-  // Safety guard: kalau tombol tidak ada, log & hentikan biar tidak error
+  // Guard tombol
   if (!el.btnNext || !el.btnPrev) {
-    console.error("Elemen tombol tidak ditemukan. Pastikan id='btnNext' & id='btnPrev' ada di HTML.");
+    console.error("ID tombol tidak ditemukan. Pastikan id='btnNext' & id='btnPrev' ada di HTML.");
     return;
   }
 
+  // ---------- Utils ----------
   async function getJSON(url){
     const r = await fetch(url);
     if (!r.ok) throw new Error(await r.text());
@@ -29,12 +30,23 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   function formatPhone(num) {
     if (!num) return "";
+    // digit only
     let clean = num.replace(/\D/g, "");
+    // hapus 0 pertama supaya +62 tidak jadi +6208...
     if (clean.startsWith("0")) clean = clean.slice(1);
     return clean;
   }
 
-  // ---------- Wizard State ----------
+  // (opsional) realtime sanitasi phone input (hanya digit)
+  const phoneEl = $("phone");
+  if (phoneEl) {
+    phoneEl.addEventListener("input", () => {
+      const digits = phoneEl.value.replace(/\D/g, "");
+      phoneEl.value = digits; // keep digits only di UI
+    });
+  }
+
+  // ---------- Wizard state ----------
   let currentStep = 1;
   const maxStep = 4;
 
@@ -56,7 +68,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (currentStep === 4) renderReview();
   }
 
-  // ---------- Validation ----------
+  // ---------- Validasi per step ----------
   function validStep1() {
     const first = $("firstName").value.trim();
     const last  = $("lastName").value.trim();
@@ -92,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return true;
   }
   function validStep3() {
-    if ($("manualSchool").checked && !$("manualSchoolInput").value.trim()) {
+    if ($("manualSchool")?.checked && !$("manualSchoolInput").value.trim()) {
       el.formMsg.textContent = "Isi Nama Sekolah (input manual).";
       return false;
     }
@@ -142,13 +154,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function wireAutocomplete(inputId, listId, type, onPicked){
     const input=document.getElementById(inputId);
     const list =document.getElementById(listId);
-    if (!input || !list) return; // guard: kalau id-nya belum ada
+    if (!input || !list) return;
     let t;
     input.addEventListener("input", ()=>{
       const q=input.value.trim(); if(q.length<2){ list.hidden=true; return;}
       clearTimeout(t);
       t=setTimeout(async()=>{
         try {
+          // PANGGIL endpoint GET autocomplete
           const data = await getJSON(`/api/salesforce-query?type=${encodeURIComponent(type)}&term=${encodeURIComponent(q)}`);
           buildMenu(input, list, data, (it)=> onPicked(it));
         } catch (e) {
@@ -160,30 +173,27 @@ document.addEventListener("DOMContentLoaded", () => {
     document.addEventListener("click",(e)=>{ if(!list.contains(e.target) && e.target!==input) list.hidden=true; });
   }
 
-  // Wire lookups
+  // Pasang wiring
   wireAutocomplete("program","programList","jurusan",(it)=>{ $("programId").value=it.Id; $("programName").value=it.Name; });
   wireAutocomplete("campus","campusList","campus",(it)=>{ $("campusId").value=it.Id; });
   wireAutocomplete("intake","intakeList","intake",(it)=>{ $("intakeId").value=it.Id; });
   wireAutocomplete("school","schoolList","sekolah",(it)=>{ $("schoolName").value=it.Name; });
 
   // Manual school toggle
-  const manualSchool = $("manualSchool");
-  if (manualSchool) {
-    manualSchool.addEventListener("change",(e)=>{
-      $("manualSchoolBox").hidden = !e.target.checked;
-      if (e.target.checked) {
-        $("school").value = "";
-        $("schoolName").value = "";
-        $("manualSchoolInput").focus();
-      }
-    });
-  }
+  $("manualSchool")?.addEventListener("change",(e)=>{
+    $("manualSchoolBox").hidden = !e.target.checked;
+    if (e.target.checked) {
+      $("school").value = "";
+      $("schoolName").value = "";
+      $("manualSchoolInput").focus();
+    }
+  });
 
   // Campaign from URL (?cmp=701xxx)
   (()=>{ const u=new URLSearchParams(location.search); const cmp=u.get("cmp"); if(cmp) $("campaignId").value=cmp; })();
 
   // ---------- Payload ----------
-  function collectPayload(forSubmit=true){
+  function collectPayload(){
     const rawPhone = $("phone").value.trim();
     const formattedPhone = rawPhone ? formatPhone(rawPhone) : null;
 
@@ -192,13 +202,18 @@ document.addEventListener("DOMContentLoaded", () => {
       lastName : $("lastName").value.trim() || "-",
       email    : $("email").value.trim(),
       phone    : formattedPhone ? `+62${formattedPhone}` : null,
+
       studyProgramId: $("programId").value || null,
       studyProgramName: $("programName").value || null,
       campusId: $("campusId").value || null,
+
+      // label UI "Tahun Ajaran", tapi backend tetap `masterIntakeId`
       masterIntakeId: $("intakeId").value || null,
+
       schoolName: $("manualSchool")?.checked
         ? $("manualSchoolInput").value.trim()
         : ($("schoolName").value || $("school").value.trim() || null),
+
       graduationYear: $("graduationYear").value ? Number($("graduationYear").value) : null,
       campaignId: $("campaignId").value || null
     };
@@ -218,7 +233,7 @@ document.addEventListener("DOMContentLoaded", () => {
     el.formMsg.textContent = "";
 
     try {
-      const payload = collectPayload(true);
+      const payload = collectPayload();
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type":"application/json" },

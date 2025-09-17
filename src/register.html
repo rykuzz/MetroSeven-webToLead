@@ -21,7 +21,7 @@
       <p>Lengkapi langkah-langkah di bawah ini untuk mendaftar.</p>
     </div>
 
-    <!-- PROGRESS STEPS (baru, bisa berubah warna) -->
+    <!-- PROGRESS STEPS (sticky + warna dinamis) -->
     <ol id="progressSteps" class="progress-steps" role="list" aria-label="Progress pendaftaran">
       <li class="step-item is-active" data-step="1" aria-current="step">
         <span class="step-index">1</span>
@@ -52,7 +52,7 @@
     <!-- ============ STEP 1: BUKTI PEMBAYARAN ============ -->
     <section class="form-step" data-step="1">
       <h3>Unggah Bukti Pembayaran</h3>
-      <p>Terima JPG/PNG atau PDF. Maksimal 5 MB.</p>
+      <p class="muted">Terima JPG/PNG atau PDF. Maksimal 5 MB.</p>
 
       <!-- KARTU VIRTUAL ACCOUNT -->
       <div class="va-card" role="group" aria-label="Info Virtual Account">
@@ -79,13 +79,13 @@
 
       <div class="form-group full-width">
         <label>Pratinjau</label>
-        <div id="paymentProofPreview" style="display:none">
-          <img id="paymentProofImg" alt="Preview bukti pembayaran" style="max-width:220px;border-radius:10px;display:none" />
+        <div id="paymentProofPreview" class="preview" style="display:none">
+          <img id="paymentProofImg" alt="Preview bukti pembayaran" />
           <div id="paymentProofMeta" class="note"></div>
         </div>
       </div>
 
-      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+      <div class="actions">
         <button type="button" class="submit-btn" id="nextBtn1" disabled>Lanjut</button>
       </div>
     </section>
@@ -104,18 +104,19 @@
         <div class="form-group">
           <label for="email">Email <span class="required-star">*</span></label>
           <input id="email" type="email" class="form-control" placeholder="nama@domain.com" required />
+          <small id="emailHint" class="help">Gunakan email aktif untuk komunikasi.</small>
         </div>
         <div class="form-group">
           <label for="phone">No. HP <span class="required-star">*</span></label>
-          <div style="display:flex">
-            <span class="form-control" style="max-width:70px;border-right:0;border-radius:8px 0 0 8px;background:#f3f4f6">+62</span>
-            <input id="phone" class="form-control" style="border-radius:0 8px 8px 0" inputmode="numeric" placeholder="81234567890" required />
+          <div class="input-group">
+            <span class="prefix">+62</span>
+            <input id="phone" class="form-control" inputmode="numeric" placeholder="81234567890" required />
           </div>
           <small class="help">Masukkan tanpa 0 di depan.</small>
         </div>
       </div>
 
-      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+      <div class="actions">
         <button type="button" class="btn" id="prevBtn2">Kembali</button>
         <button type="button" class="submit-btn" id="nextBtn2">Lanjut</button>
       </div>
@@ -149,13 +150,16 @@
           </select>
         </div>
 
+        <!-- Tahun Lulus (Year Picker) -->
         <div class="form-group">
           <label for="gradYear">Tahun Lulus</label>
-          <input id="gradYear" type="number" min="2000" max="2099" class="form-control" placeholder="Contoh: 2026" />
+          <select id="gradYear" class="form-control">
+            <option value="">— Pilih Tahun Lulus —</option>
+          </select>
         </div>
       </div>
 
-      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+      <div class="actions">
         <button type="button" class="btn" id="prevBtn3">Kembali</button>
         <button type="button" class="submit-btn" id="nextBtn3">Lanjut</button>
       </div>
@@ -193,7 +197,7 @@
         </div>
       </div>
 
-      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+      <div class="actions">
         <button type="button" class="btn" id="prevBtn4">Kembali</button>
         <button type="button" class="submit-btn" id="nextBtn4">Lanjut</button>
       </div>
@@ -202,7 +206,7 @@
     <!-- ============ STEP 5: PAS FOTO ============ -->
     <section class="form-step" data-step="5" hidden>
       <h3>Upload Pas Foto 3×4</h3>
-      <p>Format JPG/PNG, maksimal 1 MB.</p>
+      <p class="muted">Format JPG/PNG, maksimal 1 MB.</p>
 
       <div class="form-group full-width">
         <label for="photo">Pas Foto 3×4 <span class="required-star">*</span></label>
@@ -213,10 +217,10 @@
 
       <div class="form-group full-width">
         <label>Pratinjau</label>
-        <img id="photoPreview" alt="Preview pas foto" style="max-width:160px;border-radius:10px;display:none;" />
+        <img id="photoPreview" alt="Preview pas foto" class="photo-preview" />
       </div>
 
-      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+      <div class="actions">
         <button type="button" class="btn" id="prevBtn5">Kembali</button>
         <button type="button" class="submit-btn" id="nextBtn5" disabled>Lanjut</button>
       </div>
@@ -224,8 +228,8 @@
 
     <!-- ============ STEP 6: REVIEW & SUBMIT ============ -->
     <section class="form-step" data-step="6" hidden>
-      <div class="summary-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
-        <h3 style="margin-bottom:16px">Ringkasan Data</h3>
+      <div class="summary-card">
+        <h3>Ringkasan Data</h3>
 
         <div class="form-grid">
           <div class="form-group full-width"><strong>Nama</strong><div id="sumName">—</div></div>
@@ -234,12 +238,12 @@
           <div class="form-group full-width"><strong>Campus</strong><div id="sumCampus">—</div></div>
           <div class="form-group full-width"><strong>Tahun Ajaran</strong><div id="sumIntake">—</div></div>
           <div class="form-group full-width"><strong>Study Program</strong><div id="sumStudyProgram">—</div></div>
-          <div class="form-group full-width"><strong>Sekolah</strong><div id="sumSchool">—</div></div>
           <div class="form-group"><strong>Tahun Lulus</strong><div id="sumGradYear">—</div></div>
+          <div class="form-group full-width"><strong>Sekolah</strong><div id="sumSchool">—</div></div>
         </div>
 
         <div class="form-group full-width" style="margin-top:12px">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <label class="checkbox-inline">
             <input type="checkbox" id="agreeTerms" />
             <span>Saya menyetujui kebijakan privasi dan penggunaan data.</span>
           </label>
@@ -247,7 +251,7 @@
         </div>
       </div>
 
-      <div class="actions" style="display:flex;gap:12px;margin-top:16px">
+      <div class="actions">
         <button type="button" class="btn" id="prevBtn6">Kembali</button>
         <button type="button" class="submit-btn" id="submitBtn">Kirim</button>
       </div>

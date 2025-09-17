@@ -16,18 +16,15 @@ module.exports = async (req, res) => {
     const t  = esc(term);
     const c  = esc(campusId);
 
-    let soql = '';
-
     // ===== Study Program (free-text) – tidak dipakai di form utama =====
     if (type === 'jurusan') {
-      soql = `
+      const q = await conn.query(`
         SELECT Id, Name
         FROM Study_Program__c
         WHERE Name LIKE '%${t}%'
         ORDER BY Name
         LIMIT 50
-      `;
-      const q = await conn.query(soql);
+      `);
       res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
       return res.status(200).json(q);
     }
@@ -35,14 +32,13 @@ module.exports = async (req, res) => {
     // ===== Sekolah (autocomplete) – WAJIB kembalikan Id utk lookup =====
     if (type === 'sekolah') {
       if (t.length < 2) return res.status(400).json({ message: 'Kata kunci terlalu pendek' });
-      soql = `
+      const q = await conn.query(`
         SELECT Id, NPSN__c, Name
         FROM MasterSchool__c
         WHERE Name LIKE '%${t}%'
         ORDER BY Name
         LIMIT 10
-      `;
-      const q = await conn.query(soql);
+      `);
       res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
       return res.status(200).json(q);
     }
@@ -56,8 +52,7 @@ module.exports = async (req, res) => {
 
     // ===== Master Intake (optional / tidak mengikat Study Program) =====
     if (type === 'intake') {
-      // tetap disediakan bila UI kamu masih menampilkan Tahun Ajaran
-      soql = `
+      const soql = `
         SELECT Id, Name
         FROM Master_Intake__c
         ${c ? `WHERE Campus__c = '${c}'` : ''}
@@ -84,9 +79,7 @@ module.exports = async (req, res) => {
           LIMIT 200
         `);
         merged = (q1.records || []).map(r => ({ Id: r.Id, Name: r.Name }));
-      } catch (e) {
-        // kalau kolom Campus__c tidak ada, lanjut ke junction
-      }
+      } catch (e) { /* lanjut ke junction */ }
 
       // 2) Fallback: pakai junction (mis. Study_Program_Intake__c) – filter hanya Campus
       try {
@@ -103,9 +96,7 @@ module.exports = async (req, res) => {
           const name = r.Study_Program__r && r.Study_Program__r.Name;
           if (id && name && !seen.has(id)) { seen.add(id); merged.push({ Id: id, Name: name }); }
         });
-      } catch (e) {
-        // jika junction tidak ada, biarkan hasil q1 saja
-      }
+      } catch (e) { /* jika junction tidak ada, biarkan hasil q1 saja */ }
 
       res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
       return res.status(200).json({ totalSize: merged.length, done: true, records: merged });

@@ -60,12 +60,15 @@ if (proofInput) {
     if (file.size > MAX_PROOF) { proofErr.textContent = 'Ukuran maksimal 5 MB.'; return; }
 
     paymentProofFileName = file.name || 'bukti-pembayaran';
-
     proofPrev.style.display = 'flex';
     proofMeta.textContent = `${paymentProofFileName} • ${(file.size/1024/1024).toFixed(2)} MB`;
 
     const fr = new FileReader();
-    fr.onload = () => { paymentProofDataURL = fr.result; if (file.type.startsWith('image/')) { proofImg.src = fr.result; proofImg.style.display='block'; } else { proofImg.style.display='none'; } };
+    fr.onload = () => {
+      paymentProofDataURL = fr.result;
+      if (file.type.startsWith('image/')) { proofImg.src = fr.result; proofImg.style.display='block'; }
+      else { proofImg.style.display='none'; }
+    };
     fr.readAsDataURL(file);
 
     nextBtn1.disabled = false;
@@ -105,7 +108,7 @@ function getSelectedText(selectEl) {
   return i > -1 ? selectEl.options[i].textContent : '';
 }
 
-// ========= STEP 3: Campus → Intake → Program =========
+// ========= STEP 3: Campus → (optional Intake) → Program (by Campus) =========
 let campusLoaded = false;
 
 async function loadCampuses() {
@@ -136,12 +139,11 @@ async function loadCampuses() {
       $('#campusId').value = checked.value;
       $('#campusName').value = checked.closest('label').querySelector('.radio-title').textContent;
 
-      // Muat Tahun Ajaran terlebih dahulu.
+      // optional: tetap tampilkan Tahun Ajaran (tidak mempengaruhi program)
       await loadIntakes(checked.value);
 
-      // ❌ Jangan load program dulu; tunggu user pilih Tahun Ajaran
-      setSelectOptions($('#studyProgramSelect'), [], '— Pilih Tahun Ajaran dahulu —');
-      $('#studyProgramSelect').disabled = true;
+      // langsung muat Study Program by Campus
+      await loadPrograms(checked.value);
     }
 
     container.addEventListener('change', async (e) => {
@@ -150,14 +152,14 @@ async function loadCampuses() {
         $('#campusId').value = campusId;
         $('#campusName').value = e.target.closest('label').querySelector('.radio-title').textContent;
 
-        // Reset intake & program
+        // reset dropdown
         setSelectOptions($('#intakeSelect'), [], '— Memuat Tahun Ajaran… —');
-        setSelectOptions($('#studyProgramSelect'), [], '— Pilih Tahun Ajaran dahulu —');
-        $('#intakeSelect').disabled = true; $('#studyProgramSelect').disabled = true;
+        $('#intakeSelect').disabled = true;
+        setSelectOptions($('#studyProgramSelect'), [], '— Memuat Study Program… —');
+        $('#studyProgramSelect').disabled = true;
 
-        await loadIntakes(campusId);
-
-        // Program akan dimuat saat intakeSelect berubah
+        await loadIntakes(campusId);     // optional
+        await loadPrograms(campusId);    // wajib
       }
     });
 
@@ -183,21 +185,22 @@ async function loadIntakes(campusId) {
   }
 }
 
-async function loadPrograms(campusId, intakeId) {
+// ❗ hanya by campus
+async function loadPrograms(campusId) {
   const sel = $('#studyProgramSelect');
-  if (!intakeId) {
-    setSelectOptions(sel, [], '— Pilih Tahun Ajaran dahulu —');
+  if (!campusId) {
+    setSelectOptions(sel, [], '— Pilih Campus dahulu —');
     sel.disabled = true;
     return;
   }
   try {
     sel.disabled = true;
-    const q = new URLSearchParams({ type:'program', campusId, intakeId }).toString();
+    const q = new URLSearchParams({ type:'program', campusId }).toString();
     const r = await fetch(`/api/salesforce-query?${q}`);
     const j = await r.json();
     const items = j.records || [];
     if (!items.length) {
-      setSelectOptions(sel, [], '— Program belum tersedia untuk pilihan ini —');
+      setSelectOptions(sel, [], '— Program belum tersedia untuk Campus ini —');
       sel.disabled = true;
     } else {
       setSelectOptions(sel, items, '— Pilih Study Program —');
@@ -227,16 +230,12 @@ document.addEventListener('DOMContentLoaded', () => {
   populateGradYear();
 });
 
-$('#intakeSelect')?.addEventListener('change', () => {
-  const campusId = $('#campusId').value;
-  const intakeId = $('#intakeSelect').value;
-  loadPrograms(campusId, intakeId);
-});
+// Intake tidak mempengaruhi program lagi
+$('#intakeSelect')?.addEventListener('change', () => { /* nothing */ });
 
 $('#prevBtn3')?.addEventListener('click', () => goToStep(2));
 $('#nextBtn3')?.addEventListener('click', () => {
   if (!$('#campusId')?.value) return alert('Pilih Campus.');
-  if (!$('#intakeSelect')?.value) return alert('Pilih Tahun Ajaran.');
   if (!$('#studyProgramSelect')?.value) return alert('Pilih Study Program.');
   goToStep(4);
 });
@@ -267,7 +266,7 @@ schoolSearch?.addEventListener('input', () => {
         li.innerHTML = `${it.Name} ${it.NPSN__c ? `<span class="muted">• NPSN ${it.NPSN__c}</span>` : ''}`;
         li.addEventListener('click', () => {
           schoolSearch.value = it.Name;
-          schoolIdHidden.value = it.Id;      // ✅ Salesforce Id
+          schoolIdHidden.value = it.Id;      // WAJIB pakai Salesforce Id
           schoolSug.hidden = true; schoolSug.innerHTML = '';
         });
         schoolSug.appendChild(li);
@@ -337,6 +336,7 @@ $('#submitBtn')?.addEventListener('click', async (e)=>{
   try {
     $('#submitBtn').disabled = true; $('#submitBtn').textContent = 'Mengirim…';
 
+    // normalisasi +62
     let ph = digits($('#phone').value || '');
     if (ph.startsWith('0')) ph = ph.slice(1);
     if (!ph.startsWith('62')) ph = `62${ph}`;
@@ -350,13 +350,14 @@ $('#submitBtn')?.addEventListener('click', async (e)=>{
 
       campusId       : $('#campusId').value || null,
       campusName     : $('#campusName').value || null,
-      masterIntakeId : $('#intakeSelect').value || null,
+      masterIntakeId : $('#intakeSelect').value || null, // opsional
       intakeName     : getSelectedText($('#intakeSelect')) || null,
       studyProgramId : $('#studyProgramSelect').value || null,
       studyProgramName : getSelectedText($('#studyProgramSelect')) || null,
 
       graduationYear : $('#gradYear').value || null,
 
+      // hanya kirim kalau benar SF Id
       schoolId       : $('#schoolId')?.value && isSfId($('#schoolId').value) ? $('#schoolId').value : null,
 
       paymentProof: window.paymentProofDataURL ? { dataUrl: window.paymentProofDataURL, fileName: window.paymentProofFileName || 'bukti-pembayaran' } : null,

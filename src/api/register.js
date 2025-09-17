@@ -1,131 +1,110 @@
-// Membuat/Upsert Person Account → Create Opportunity (Booking Form)
-// Upload Bukti Pembayaran & Pas Foto (ContentVersion) → Link ke Account & Opportunity
-// Set Is_Booking_Fee_Paid__c = true dan Booking_Fee_Amount__c = 300000
-
 const jsforce = require('jsforce');
 
+// POST /api/register
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ message: 'Gunakan POST' });
-
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+  }
+
   const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
 
   try {
     await conn.login(SF_USERNAME, SF_PASSWORD);
-    const b = req.body || {};
+    const {
+      firstName, lastName, email, phone,
+      campusId, masterIntakeId, studyProgramId,
+      graduationYear, schoolId,
+      studyProgramName,
+      paymentProof, photo
+    } = req.body || {};
 
-    const getBase64FromDataUrl = (dataUrl) => {
-      const m = /^data:(.*?);base64,(.*)$/.exec(dataUrl || '');
-      if (!m) return null;
-      return { mime: m[1], base64: m[2] };
-    };
+    // ----- Create Person Account (opsional; jika kamu sudah punya flow sendiri, lewati) -----
+    // Pastikan org kamu mengizinkan create IsPersonAccount dari API.
+    // Jika tidak, kamu bisa cari/merge existing account by email/phone.
+    const accountName = `${firstName} ${lastName || ''}`.trim();
+    let accountId;
 
-    // ===== Upsert Person Account by Email =====
-    let accountId = null;
-    if (b.email) {
-      const emailEsc = String(b.email).replace(/'/g, "\\'");
-      const found = await conn.query(`
-        SELECT Id FROM Account
-        WHERE IsPersonAccount = true AND PersonEmail = '${emailEsc}'
-        LIMIT 1
+    try {
+      const acc = await conn.sobject('Account').create({
+        RecordTypeId: null,          // biarkan default Person Account
+        IsPersonAccount: true,       // butuh permission
+        FirstName: firstName,
+        LastName: lastName || '-',
+        PersonEmail: email,
+        Phone: phone,
+        Name: accountName
+      });
+      if (!acc.success) throw new Error('Failed to create Person Account');
+      accountId = acc.id;
+    } catch (e) {
+      // Jika tidak boleh set IsPersonAccount, fallback: cari existing by email
+      const existing = await conn.query(`
+        SELECT Id FROM Account WHERE PersonEmail = '${(email || '').replace(/'/g,"\\'")}' LIMIT 1
       `);
-      if (found.records.length) {
-        accountId = found.records[0].Id;
-        await conn.sobject('Account').update({
-          Id: accountId,
-          FirstName: b.firstName || '',
-          LastName : b.lastName  || '-',
-          PersonEmail: b.email,
-          PersonMobilePhone: b.phone || null,
-          ...(b.schoolId ? { Master_School__c: b.schoolId } : {})
+      if (existing.totalSize > 0) {
+        accountId = existing.records[0].Id;
+      } else {
+        // buat business account biasa
+        const acc2 = await conn.sobject('Account').create({
+          Name: accountName
         });
+        accountId = acc2.id;
       }
     }
-    if (!accountId) {
-      const accDesc = await conn.sobject('Account').describe();
-      const rt =
-        (accDesc.recordTypeInfos||[]).find(r => r.available && (r.name?.toLowerCase().includes('person') || r.developerName?.toLowerCase().includes('person'))) ||
-        (accDesc.recordTypeInfos||[]).find(r => r.available);
 
-      const created = await conn.sobject('Account').create({
-        RecordTypeId: rt?.recordTypeId,
-        FirstName: b.firstName || '',
-        LastName : b.lastName  || '-',
-        PersonEmail: b.email,
-        Phone: b.phone || null,
-        ...(b.schoolId ? { Master_School__c: b.schoolId } : {})
-      });
-      if (!created.success) throw new Error(created.errors?.join(', ') || 'Gagal membuat Account');
-      accountId = created.id;
-    }
+    // ----- Create Opportunity (Application Progress) -----
+    const oppName = `REG - ${studyProgramName || 'Program'} - ${accountName}`;
+    const today = new Date();
+    const isoDate = today.toISOString().slice(0,10);
 
-    // ===== Create Opportunity (Booking Form) =====
-    const closeDate = new Date(); closeDate.setDate(closeDate.getDate() + 30);
-    const oppFields = {
-      Name: `REG - ${b.lastName || 'Applicant'} - ${b.studyProgramName || 'Program'}`,
-      StageName: 'Booking Form',
-      CloseDate: closeDate.toISOString().slice(0,10),
-      AccountId: accountId,
-      Study_Program__c: b.studyProgramId || null,
-      Campus__c: b.campusId || null,
-      Master_Intake__c: b.masterIntakeId || null,
-      Graduation_Year__c: b.graduationYear || null,
-      LeadSource: 'Metro Seven LP',
-      Is_Booking_Fee_Paid__c: true,
-      Booking_Fee_Amount__c: 300000 // << hardcode 300k
+    const oppPayload = {
+      Name: oppName,
+      StageName: 'Booking Form',               // default stage
+      CloseDate: isoDate,
+
+      AccountId: accountId,                    // Applicant Name (Lookup Account/Applicant)
+      Campus__c: campusId || null,
+      Master_Intake__c: masterIntakeId || null,
+      Study_Program__c: studyProgramId || null,
+      Graduation_Year__c: graduationYear ? Number(graduationYear) : null,
+
+      Master_School__c: schoolId || null,       
+
+      Booking_Fee_Amount__c: 300000,           
+      Is_Booking_Fee_Paid__c: !!paymentProof,  
     };
-    const oppIns = await conn.sobject('Opportunity').create(oppFields);
-    if (!oppIns.success) throw new Error(oppIns.errors?.join(', ') || 'Gagal membuat Opportunity');
-    const opportunityId = oppIns.id;
 
-    // ===== Upload Bukti Pembayaran (wajib) =====
-    if (!b.paymentProof || !(b.paymentProof.dataUrl || b.paymentProof.base64)) {
-      throw new Error('Bukti pembayaran wajib diunggah.');
-    }
-    const pp = b.paymentProof.dataUrl
-      ? getBase64FromDataUrl(b.paymentProof.dataUrl)
-      : { mime: 'application/octet-stream', base64: b.paymentProof.base64 };
-    if (!pp || !pp.base64) throw new Error('Format bukti pembayaran tidak valid.');
-    const proofCV = await conn.sobject('ContentVersion').create({
-      Title: `Bukti Pembayaran - ${b.firstName || ''} ${b.lastName || ''}`.trim(),
-      PathOnClient: b.paymentProof.fileName || 'bukti-pembayaran',
-      VersionData: pp.base64
-    });
-    if (!proofCV.success) throw new Error(proofCV.errors?.join(', ') || 'Gagal upload bukti pembayaran');
-    const proofDoc = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${proofCV.id}' LIMIT 1`);
-    const proofDocId = proofDoc.records[0].ContentDocumentId;
-    await conn.sobject('ContentDocumentLink').create({ ContentDocumentId: proofDocId, LinkedEntityId: opportunityId, ShareType:'V', Visibility:'AllUsers' });
-    await conn.sobject('ContentDocumentLink').create({ ContentDocumentId: proofDocId, LinkedEntityId: accountId,      ShareType:'V', Visibility:'AllUsers' });
+    const oppRes = await conn.sobject('Opportunity').create(oppPayload);
+    if (!oppRes.success) throw new Error('Gagal membuat Opportunity');
+    const oppId = oppRes.id;
 
-    // ===== Upload Pas Foto 3x4 (wajib) =====
-    if (!b.photo || !(b.photo.dataUrl || b.photo.base64)) {
-      throw new Error('Pas foto 3×4 wajib diunggah.');
-    }
-    const ph = b.photo.dataUrl
-      ? getBase64FromDataUrl(b.photo.dataUrl)
-      : { mime: 'application/octet-stream', base64: b.photo.base64 };
-    if (!ph || !ph.base64) throw new Error('Format pas foto tidak valid.');
-    const photoCV = await conn.sobject('ContentVersion').create({
-      Title: `Pas Foto 3x4 - ${b.firstName || ''} ${b.lastName || ''}`.trim(),
-      PathOnClient: b.photo.fileName || 'pas-foto-3x4.jpg',
-      VersionData: ph.base64
-    });
-    if (!photoCV.success) throw new Error(photoCV.errors?.join(', ') || 'Gagal upload pas foto');
-    const photoDoc = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${photoCV.id}' LIMIT 1`);
-    const photoDocId = photoDoc.records[0].ContentDocumentId;
-    await conn.sobject('ContentDocumentLink').create({ ContentDocumentId: photoDocId, LinkedEntityId: accountId,      ShareType:'V', Visibility:'AllUsers' });
-    await conn.sobject('ContentDocumentLink').create({ ContentDocumentId: photoDocId, LinkedEntityId: opportunityId, ShareType:'V', Visibility:'AllUsers' });
+    // ----- helper upload ContentVersion -----
+    const uploadContent = async (file, title) => {
+      if (!file || !file.dataUrl) return null;
+      const m = String(file.dataUrl).match(/^data:(.*?);base64,(.*)$/);
+      if (!m) return null;
+      const contentType = m[1] || 'application/octet-stream';
+      const base64Body  = m[2];
 
-    return res.status(200).json({
-      success: true,
-      accountId,
-      opportunityId,
-      paymentProofDocId: proofDocId,
-      photoDocId
-    });
-  } catch (e) {
-    console.error('register error:', e);
-    return res.status(500).json({ success:false, message:e.message });
+      const cv = await conn.sobject('ContentVersion').create({
+        Title: title || (file.fileName || 'file'),
+        PathOnClient: file.fileName || 'file',
+        VersionData: base64Body,
+        FirstPublishLocationId: oppId, // auto-link ke Opp
+      });
+      return cv;
+    };
+
+    // Upload bukti pembayaran & pas foto
+    await uploadContent(paymentProof, 'Bukti Pembayaran');
+    await uploadContent(photo, 'Pas Foto 3x4');
+
+    return res.status(200).json({ success: true, id: oppId });
+
+  } catch (err) {
+    console.error('Register Error:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Gagal memproses pendaftaran' });
   }
 };
-

@@ -1,134 +1,224 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Form Pendaftaran</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Form Pendaftaran — Metro Seven University</title>
+
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/register-style.css" />
 </head>
 <body>
-  <main class="form-container">
-    <a class="btn-back" href="index.html">← Kembali</a>
+  <div class="form-container">
 
-    <div class="form-logo"><img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University" /></div>
-    <header class="form-header">
-      <h2>Form Pendaftaran</h2>
-      <p>Lengkapi langkah-langkah di bawah ini untuk mendaftar.</p>
-    </header>
-
-    <div class="wizard-progress">
-      <div class="wizard-progress-bar" id="progressBar" style="width:25%"></div>
-      <div class="wizard-steps">
-        <span class="wizard-step is-active" data-step="1">1. Data Pemohon</span>
-        <span class="wizard-step" data-step="2">2. Preferensi Studi</span>
-        <span class="wizard-step" data-step="3">3. Sekolah</span>
-        <span class="wizard-step" data-step="4">4. Review & Submit</span>
-      </div>
+    <a class="btn-back" href="index.html">← Kembali ke Beranda</a>
+    <div class="form-logo">
+      <img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University" />
     </div>
 
-    <form id="regForm" novalidate>
-      <!-- STEP 1 -->
-      <section class="wizard-panel" data-step="1">
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="firstName">Nama Depan <span class="required-star">*</span></label>
-            <input id="firstName" class="form-control" placeholder="Contoh: Budi" required />
-          </div>
-          <div class="form-group">
-            <label for="lastName">Nama Belakang <span class="required-star">*</span></label>
-            <input id="lastName" class="form-control" placeholder="Contoh: Santoso" required />
-          </div>
-          <div class="form-group">
-            <label for="email">Email <span class="required-star">*</span></label>
-            <input id="email" type="email" class="form-control" placeholder="nama@domain.com" required />
-          </div>
-          <div class="form-group">
-            <label for="phone">No. HP <span class="required-star">*</span></label>
-            <div class="phone-input">
-              <span class="prefix">+62</span>
-              <input id="phone" class="form-control phone-suffix" type="tel" placeholder="81234567890" required />
-            </div>
-          </div>
-        </div>
-      </section>
+    <div class="form-header">
+      <h2>Form Pendaftaran</h2>
+      <p>Lengkapi langkah-langkah di bawah ini untuk mendaftar.</p>
+    </div>
 
-      <!-- STEP 2 -->
-      <section class="wizard-panel" data-step="2" hidden>
-        <div class="form-grid">
-          <div class="form-group full-width">
-            <label for="program">Study Program <span class="required-star">*</span></label>
-            <input id="program" class="form-control ac-input" placeholder="Cari jurusan, contoh: Informatika" autocomplete="off" required />
-            <ul class="suggestions" id="programList" hidden></ul>
-            <input type="hidden" id="programId" />
-            <input type="hidden" id="programName" />
-          </div>
-          <div class="form-group">
-            <label for="campus">Campus</label>
-            <input id="campus" class="form-control ac-input" placeholder="Pilih kampus tujuan" autocomplete="off" />
-            <ul class="suggestions" id="campusList" hidden></ul>
-            <input type="hidden" id="campusId" />
-          </div>
-          <div class="form-group">
-            <label for="intake">Tahun Ajaran <span class="required-star">*</span></label>
-            <input id="intake" class="form-control ac-input" placeholder="Contoh: 2025/2026 Ganjil" autocomplete="off" required />
-            <ul class="suggestions" id="intakeList" hidden></ul>
-            <input type="hidden" id="intakeId" />
-          </div>
-        </div>
-      </section>
+    <ol class="progress-steps" style="display:flex;gap:16px;margin-bottom:18px;list-style:none;color:#64748b;font-size:14px">
+      <li>1. Bukti Pembayaran</li>
+      <li>2. Data Pemohon</li>
+      <li>3. Preferensi Studi</li>
+      <li>4. Sekolah</li>
+      <li>5. Upload Pas Foto</li>
+      <li>6. Review & Submit</li>
+    </ol>
 
-      <!-- STEP 3 -->
-      <section class="wizard-panel" data-step="3" hidden>
-        <div class="form-grid">
-          <div class="form-group full-width">
-            <label for="school">Sekolah Asal</label>
-            <input id="school" class="form-control ac-input" placeholder="Cari nama sekolah" autocomplete="off" />
-            <ul class="suggestions" id="schoolList" hidden></ul>
-            <input type="hidden" id="schoolId" />   <!-- ⬅️ penting untuk MasterSchool__c -->
-            <input type="hidden" id="schoolName" />
-            <div class="manual-trigger-group">
-              <input type="checkbox" id="manualSchool" />
-              <label for="manualSchool">Input manual bila sekolah tidak ditemukan</label>
-            </div>
-          </div>
-          <div class="form-group full-width other-school-container" id="manualSchoolBox" hidden>
-            <div class="manual-input-header">Nama Sekolah (input manual)</div>
-            <input id="manualSchoolInput" class="form-control" placeholder="Contoh: SMA Harapan Bangsa" />
-          </div>
-          <div class="form-group">
-            <label for="graduationYear">Tahun Lulus</label>
-            <input id="graduationYear" class="form-control" type="number" min="1990" max="2100" placeholder="Contoh: 2025" />
-          </div>
-        </div>
-      </section>
+    <!-- STEP 1: BUKTI PEMBAYARAN -->
+    <section class="form-step" data-step="1">
+      <h3>Unggah Bukti Pembayaran</h3>
+      <p>Terima JPG/PNG atau PDF. Maksimal 5 MB.</p>
 
-      <!-- STEP 4 -->
-      <section class="wizard-panel" data-step="4" hidden>
-        <div class="review-box">
-          <h3>Ringkasan Data</h3>
-          <div id="reviewContent" class="review-grid"></div>
-          <div class="consent">
-            <label class="checkbox">
-              <input type="checkbox" id="consentCheck" />
-              <span>Saya menyetujui kebijakan privasi dan penggunaan data.</span>
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <!-- hidden tracking -->
-      <input type="hidden" id="campaignId" />
-
-      <!-- Nav -->
-      <div class="wizard-nav">
-        <button class="btn-secondary" type="button" id="btnPrev" disabled>Kembali</button>
-        <button class="submit-btn" type="button" id="btnNext">Lanjut</button>
+      <div class="form-group full-width">
+        <label for="paymentProof">Bukti Pembayaran <span class="required-star">*</span></label>
+        <input id="paymentProof" type="file" accept="image/jpeg,image/png,application/pdf" class="form-control" required />
+        <small class="help">Contoh: screenshot transfer, struk VA, atau PDF.</small>
+        <div id="paymentProofError" class="field-error" aria-live="polite"></div>
       </div>
 
-      <p id="formMsg" class="debug-info" aria-live="polite"></p>
-    </form>
-  </main>
+      <div class="form-group full-width">
+        <label>Pratinjau</label>
+        <div id="paymentProofPreview" style="display:none">
+          <img id="paymentProofImg" alt="Preview bukti pembayaran" style="max-width:220px;border-radius:10px;display:none" />
+          <div id="paymentProofMeta" class="note"></div>
+        </div>
+      </div>
+
+      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+        <button type="button" class="submit-btn" id="nextBtn1" disabled>Lanjut</button>
+      </div>
+    </section>
+
+    <!-- STEP 2: DATA PEMOHON -->
+    <section class="form-step" data-step="2" hidden>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="firstName">Nama Depan <span class="required-star">*</span></label>
+          <input id="firstName" class="form-control" placeholder="Contoh: Ronaldo" required />
+        </div>
+        <div class="form-group">
+          <label for="lastName">Nama Belakang</label>
+          <input id="lastName" class="form-control" placeholder="Contoh: Messi" />
+        </div>
+        <div class="form-group">
+          <label for="email">Email <span class="required-star">*</span></label>
+          <input id="email" type="email" class="form-control" placeholder="nama@domain.com" required />
+        </div>
+        <div class="form-group">
+          <label for="phone">No. HP <span class="required-star">*</span></label>
+          <div style="display:flex">
+            <span class="form-control" style="max-width:70px;border-right:0;border-radius:8px 0 0 8px;background:#f3f4f6">+62</span>
+            <input id="phone" class="form-control" style="border-radius:0 8px 8px 0" inputmode="numeric" placeholder="81234567890" required />
+          </div>
+          <small class="help">Masukkan tanpa 0 di depan.</small>
+        </div>
+      </div>
+
+      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+        <button type="button" class="btn" id="prevBtn2">Kembali</button>
+        <button type="button" class="submit-btn" id="nextBtn2">Lanjut</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: PREFERENSI STUDI -->
+    <section class="form-step" data-step="3" hidden>
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label for="studyProgramSearch">Study Program <span class="required-star">*</span></label>
+          <input id="studyProgramSearch" class="form-control" autocomplete="off" placeholder="Cari program studi (mis. Business, Law)" />
+          <ul id="studyProgramSuggestions" class="suggestions" hidden></ul>
+          <input type="hidden" id="studyProgramId" />
+          <input type="hidden" id="studyProgramName" />
+        </div>
+
+        <!-- CAMPUS RADIO LIST -->
+        <div class="form-group full-width">
+          <label>Campus <span class="required-star">*</span></label>
+          <div id="campusRadios" class="radio-list"></div>
+          <input type="hidden" id="campusId" />
+          <input type="hidden" id="campusName" />
+        </div>
+
+        <div class="form-group full-width">
+          <label for="intakeSearch">Tahun Ajaran <span class="required-star">*</span></label>
+          <input id="intakeSearch" class="form-control" autocomplete="off" placeholder="Contoh: Odd Semester 2024/2025" />
+          <ul id="intakeSuggestions" class="suggestions" hidden></ul>
+          <input type="hidden" id="masterIntakeId" />
+        </div>
+
+        <div class="form-group">
+          <label for="gradYear">Tahun Lulus</label>
+          <input id="gradYear" type="number" min="2000" max="2099" class="form-control" placeholder="Contoh: 2026" />
+        </div>
+      </div>
+
+      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+        <button type="button" class="btn" id="prevBtn3">Kembali</button>
+        <button type="button" class="submit-btn" id="nextBtn3">Lanjut</button>
+      </div>
+    </section>
+
+    <!-- STEP 4: SEKOLAH -->
+    <section class="form-step" data-step="4" hidden>
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label for="schoolSearch">Sekolah Asal <span class="required-star">*</span></label>
+          <input id="schoolSearch" class="form-control" autocomplete="off" placeholder="Ketik nama sekolah" />
+          <ul id="schoolSuggestions" class="suggestions" hidden></ul>
+          <input type="hidden" id="schoolId" />
+        </div>
+
+        <div class="form-group full-width">
+          <div class="manual-trigger-group">
+            <input type="checkbox" id="schoolManualToggle" />
+            <label for="schoolManualToggle">Saya tidak menemukan sekolah saya</label>
+          </div>
+        </div>
+
+        <div id="otherSchoolContainer" class="other-school-container" style="display:none">
+          <div class="manual-input-header">Input Sekolah Manual</div>
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label for="schoolNameManual">Nama Sekolah</label>
+              <input id="schoolNameManual" class="form-control" placeholder="Contoh: SMA Sains Wahid Hasyim" />
+            </div>
+            <div class="form-group">
+              <label for="schoolCityManual">Kota/Kabupaten</label>
+              <input id="schoolCityManual" class="form-control" placeholder="Contoh: Jakarta Barat" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+        <button type="button" class="btn" id="prevBtn4">Kembali</button>
+        <button type="button" class="submit-btn" id="nextBtn4">Lanjut</button>
+      </div>
+    </section>
+
+    <!-- STEP 5: PAS FOTO -->
+    <section class="form-step" data-step="5" hidden>
+      <h3>Upload Pas Foto 3×4</h3>
+      <p>Format JPG/PNG, maksimal 1 MB.</p>
+
+      <div class="form-group full-width">
+        <label for="photo">Pas Foto 3×4 <span class="required-star">*</span></label>
+        <input id="photo" type="file" accept="image/jpeg,image/png" class="form-control" required />
+        <small id="photoHelp" class="help">Ukuran maks 1 MB. Rasio 3:4 disarankan.</small>
+        <div id="photoError" class="field-error" aria-live="polite"></div>
+      </div>
+
+      <div class="form-group full-width">
+        <label>Pratinjau</label>
+        <img id="photoPreview" alt="Preview pas foto" style="max-width:160px;border-radius:10px;display:none;" />
+      </div>
+
+      <div class="actions" style="display:flex;gap:12px;margin-top:12px">
+        <button type="button" class="btn" id="prevBtn5">Kembali</button>
+        <button type="button" class="submit-btn" id="nextBtn5" disabled>Lanjut</button>
+      </div>
+    </section>
+
+    <!-- STEP 6: REVIEW -->
+    <section class="form-step" data-step="6" hidden>
+      <div class="summary-card" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+        <h3 style="margin-bottom:16px">Ringkasan Data</h3>
+
+        <div class="form-grid">
+          <div class="form-group full-width"><strong>Nama</strong><div id="sumName">—</div></div>
+          <div class="form-group full-width"><strong>Email</strong><div id="sumEmail">—</div></div>
+          <div class="form-group full-width"><strong>No. HP</strong><div id="sumPhone">—</div></div>
+          <div class="form-group full-width"><strong>Study Program</strong><div id="sumStudyProgram">—</div></div>
+          <div class="form-group full-width"><strong>Campus</strong><div id="sumCampus">—</div></div>
+          <div class="form-group full-width"><strong>Tahun Ajaran</strong><div id="sumIntake">—</div></div>
+          <div class="form-group full-width"><strong>Sekolah</strong><div id="sumSchool">—</div></div>
+          <div class="form-group"><strong>Tahun Lulus</strong><div id="sumGradYear">—</div></div>
+        </div>
+
+        <div class="form-group full-width" style="margin-top:12px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+            <input type="checkbox" id="agreeTerms" />
+            <span>Saya menyetujui kebijakan privasi dan penggunaan data.</span>
+          </label>
+          <div id="agreeError" class="field-error" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div class="actions" style="display:flex;gap:12px;margin-top:16px">
+        <button type="button" class="btn" id="prevBtn6">Kembali</button>
+        <button type="button" class="submit-btn" id="submitBtn">Kirim</button>
+      </div>
+
+      <div id="submitMsg" class="debug-info" style="display:none"></div>
+    </section>
+
+  </div>
 
   <script src="js/register-script.js"></script>
 </body>

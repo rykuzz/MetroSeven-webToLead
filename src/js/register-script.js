@@ -3,6 +3,7 @@ const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e).toLowerCase());
 const digits  = (s) => String(s||'').replace(/\D/g,'');
+const isSfId  = (v) => /^[a-zA-Z0-9]{15,18}$/.test(String(v||''));
 
 function updateProgress(currentStep) {
   const items = $$('#progressSteps .step-item');
@@ -97,7 +98,7 @@ $('#nextBtn2')?.addEventListener('click', () => {
   goToStep(3);
 });
 
-// ===== Helpers (select options) =====
+// ===== Helpers =====
 function setSelectOptions(selectEl, items, placeholder = '— Pilih —') {
   selectEl.innerHTML = '';
   const ph = document.createElement('option');
@@ -206,8 +207,8 @@ async function loadPrograms(campusId, intakeId) {
 function populateGradYear() {
   const sel = $('#gradYear'); if (!sel) return;
   const current = new Date().getFullYear();
-  const start = 2005;           // batas bawah (sesuai kebutuhan)
-  const end   = current + 2;    // boleh 2 tahun ke depan
+  const start = 2005;
+  const end   = current + 2;
   const years = [];
   for (let y = end; y >= start; y--) years.push(String(y));
   setSelectOptions(sel, years, '— Pilih Tahun Lulus —');
@@ -255,10 +256,10 @@ schoolSearch?.addEventListener('input', () => {
       schoolSug.innerHTML = '';
       items.forEach(it => {
         const li = document.createElement('li');
-        li.textContent = it.Name;
+        li.innerHTML = `${it.Name} ${it.NPSN__c ? `<span class="muted">• NPSN ${it.NPSN__c}</span>` : ''}`;
         li.addEventListener('click', () => {
           schoolSearch.value = it.Name;
-          schoolIdHidden.value = it.NPSN__c || '';
+          schoolIdHidden.value = it.Id;      // ✅ Salesforce Id
           schoolSug.hidden = true; schoolSug.innerHTML = '';
         });
         schoolSug.appendChild(li);
@@ -270,7 +271,10 @@ schoolSearch?.addEventListener('input', () => {
 
 $('#prevBtn4')?.addEventListener('click', () => goToStep(3));
 $('#nextBtn4')?.addEventListener('click', () => {
-  if (!toggleSchoolManual?.checked && !$('#schoolId')?.value) return alert('Pilih sekolah atau aktifkan input manual.');
+  if (!toggleSchoolManual?.checked && !isSfId($('#schoolId')?.value)) {
+    alert('Pilih sekolah dari daftar (bukan ketik manual).');
+    return;
+  }
   goToStep(5);
 });
 
@@ -347,7 +351,8 @@ $('#submitBtn')?.addEventListener('click', async (e)=>{
 
       graduationYear : $('#gradYear').value || null,
 
-      schoolId       : $('#schoolId')?.value || null,
+
+      schoolId       : $('#schoolId')?.value && isSfId($('#schoolId').value) ? $('#schoolId').value : null,
 
       // files
       paymentProof: window.paymentProofDataURL ? { dataUrl: window.paymentProofDataURL, fileName: window.paymentProofFileName || 'bukti-pembayaran' } : null,

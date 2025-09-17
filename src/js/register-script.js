@@ -6,7 +6,40 @@ const digits  = (s) => String(s||'').replace(/\D/g,'');
 function goToStep(n){ $$('.form-step').forEach(sec => sec.hidden = sec.getAttribute('data-step') !== String(n)); window.scrollTo({top:0,behavior:'smooth'}); }
 window.goToStep = goToStep;
 
-// ===== Step 1: Payment Proof =====
+// ===== Hardcode Virtual Account (BARU) =====
+// Ganti sesuai kebutuhanmu
+const VA_INFO = {
+  bank: 'BCA',                            // contoh: BCA / BNI / BRI / Mandiri
+  number: '8888800123456789',             // <<— NOMOR VA HARDCODE
+  name: 'Metro Seven Admission'
+};
+
+// Inject VA ke UI saat siap
+document.addEventListener('DOMContentLoaded', () => {
+  const bankEl = $('#vaBank');
+  const numEl  = $('#vaNumber');
+  if (bankEl) bankEl.textContent = VA_INFO.bank;
+  if (numEl)  numEl.textContent  = VA_INFO.number;
+});
+
+// Tombol Salin VA
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  const sel = document.querySelector(btn.dataset.copy);
+  if (!sel) return;
+  const text = (sel.textContent || '').trim();
+  try {
+    await navigator.clipboard.writeText(text);
+    const prev = btn.textContent;
+    btn.textContent = 'Tersalin';
+    setTimeout(() => (btn.textContent = prev), 1200);
+  } catch {
+    alert('Gagal menyalin. Silakan salin manual.');
+  }
+});
+
+// ===== STEP 1: Payment Proof =====
 const MAX_PROOF = 5 * 1024 * 1024;
 const ALLOWED_PROOF = ['image/jpeg','image/png','application/pdf'];
 let paymentProofDataURL = null;
@@ -46,12 +79,16 @@ if (proofInput) {
       proofImg.style.display='none';
     }
     nextBtn1.disabled = false;
+
+    // expose ke window (dipakai saat submit)
+    window.paymentProofDataURL = paymentProofDataURL;
+    window.paymentProofFileName = paymentProofFileName;
   });
 
   nextBtn1?.addEventListener('click', () => goToStep(2));
 }
 
-// ===== Step 2: Data Pemohon =====
+// ===== STEP 2: Data Pemohon =====
 $('#prevBtn2')?.addEventListener('click', () => goToStep(1));
 $('#nextBtn2')?.addEventListener('click', () => {
   const firstName = $('#firstName')?.value.trim();
@@ -63,20 +100,36 @@ $('#nextBtn2')?.addEventListener('click', () => {
   goToStep(3);
 });
 
-// ===== Step 3: Campus radio =====
+// ===== Helpers select (step 3) =====
+function setSelectOptions(selectEl, items, placeholder = '— Pilih —') {
+  selectEl.innerHTML = '';
+  const ph = document.createElement('option');
+  ph.value = '';
+  ph.textContent = placeholder;
+  selectEl.appendChild(ph);
+
+  (items || []).forEach(it => {
+    const opt = document.createElement('option');
+    opt.value = it.Id;
+    opt.textContent = it.Name;
+    selectEl.appendChild(opt);
+  });
+}
+function getSelectedText(selectEl) {
+  const i = selectEl.selectedIndex;
+  return i > -1 ? selectEl.options[i].textContent : '';
+}
+
+// ===== STEP 3: Campus → Intake → Program =====
 let campusLoaded = false;
 
-async function loadCampuses(initialTerm = '') {
+async function loadCampuses() {
   const container = $('#campusRadios');
   if (!container || campusLoaded) return;
   campusLoaded = true;
 
   try {
-    const url = initialTerm && initialTerm.trim().length >= 2
-      ? `/api/salesforce-query?type=campus&term=${encodeURIComponent(initialTerm)}`
-      : `/api/salesforce-query?type=campus`;
-
-    const r = await fetch(url);
+    const r = await fetch(`/api/salesforce-query?type=campus`);
     const j = await r.json();
     const recs = j.records || [];
 
@@ -84,7 +137,6 @@ async function loadCampuses(initialTerm = '') {
       container.innerHTML = `<div class="note">Data campus tidak tersedia.</div>`;
       return;
     }
-
     container.innerHTML = '';
     recs.forEach((c, idx) => {
       const id = `camp_${c.Id}`;
@@ -93,49 +145,132 @@ async function loadCampuses(initialTerm = '') {
       label.htmlFor = id;
       label.innerHTML = `
         <input id="${id}" type="radio" name="campusOption" value="${c.Id}" ${idx===0?'checked':''}>
-        <div>
-          <div class="radio-title">${c.Name}</div>
-        </div>
+        <div><div class="radio-title">${c.Name}</div></div>
       `;
       container.appendChild(label);
     });
 
-    // set hidden awal
+    // set hidden awal + load intake/program pertama kali
     const checked = container.querySelector('input[name="campusOption"]:checked');
     if (checked) {
       $('#campusId').value = checked.value;
       $('#campusName').value = checked.closest('label').querySelector('.radio-title').textContent;
+      await loadIntakes(checked.value);
+      await loadPrograms(checked.value, '');
     }
 
-    // sync saat berubah
-    container.addEventListener('change', (e) => {
+    // on change campus:
+    container.addEventListener('change', async (e) => {
       if (e.target && e.target.name === 'campusOption') {
-        $('#campusId').value = e.target.value;
+        const campusId = e.target.value;
+        $('#campusId').value = campusId;
         $('#campusName').value = e.target.closest('label').querySelector('.radio-title').textContent;
+
+        // reset dependent
+        setSelectOptions($('#intakeSelect'), [], '— Pilih Tahun Ajaran —');
+        setSelectOptions($('#studyProgramSelect'), [], '— Pilih Study Program —');
+        $('#intakeSelect').disabled = true;
+        $('#studyProgramSelect').disabled = true;
+
+        await loadIntakes(campusId);
+        await loadPrograms(campusId, $('#intakeSelect').value || '');
       }
     });
+
   } catch (err) {
     console.error(err);
     container.innerHTML = `<div class="field-error">Gagal memuat data Campus.</div>`;
   }
 }
 
-// load daftar campus saat halaman siap
+async function loadIntakes(campusId) {
+  const sel = $('#intakeSelect');
+  try {
+    sel.disabled = true;
+    const r = await fetch(`/api/salesforce-query?type=intake&campusId=${encodeURIComponent(campusId)}`);
+    const j = await r.json();
+    const items = j.records || [];
+    setSelectOptions(sel, items, '— Pilih Tahun Ajaran —');
+    sel.disabled = false;
+  } catch (e) {
+    console.error(e);
+    setSelectOptions(sel, [], '— Pilih Tahun Ajaran —');
+    sel.disabled = false;
+  }
+}
+
+async function loadPrograms(campusId, intakeId) {
+  const sel = $('#studyProgramSelect');
+  try {
+    sel.disabled = true;
+    const q = new URLSearchParams({ type:'program', campusId, intakeId }).toString();
+    const r = await fetch(`/api/salesforce-query?${q}`);
+    const j = await r.json();
+    const items = j.records || [];
+    setSelectOptions(sel, items, '— Pilih Study Program —');
+    sel.disabled = false;
+  } catch (e) {
+    console.error(e);
+    setSelectOptions(sel, [], '— Pilih Study Program —');
+    sel.disabled = false;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => loadCampuses());
 
-// tombol step 3
+$('#intakeSelect')?.addEventListener('change', () => {
+  const campusId = $('#campusId').value;
+  const intakeId = $('#intakeSelect').value;
+  loadPrograms(campusId, intakeId);
+});
+
 $('#prevBtn3')?.addEventListener('click', () => goToStep(2));
 $('#nextBtn3')?.addEventListener('click', () => {
-  if (!$('#studyProgramId')?.value) return alert('Pilih Study Program.');
   if (!$('#campusId')?.value) return alert('Pilih Campus.');
-  if (!$('#masterIntakeId')?.value) return alert('Pilih Tahun Ajaran.');
+  if (!$('#intakeSelect')?.value) return alert('Pilih Tahun Ajaran.');
+  if (!$('#studyProgramSelect')?.value) return alert('Pilih Study Program.');
   goToStep(4);
 });
 
-// ===== Step 4: Sekolah =====
+// ===== STEP 4: Sekolah (autocomplete sederhana) =====
 const toggleSchoolManual = $('#schoolManualToggle');
 const otherSchoolBox = $('#otherSchoolContainer');
 toggleSchoolManual?.addEventListener('change', e => { otherSchoolBox.style.display = e.target.checked ? 'block' : 'none'; });
+
+const schoolSearch = $('#schoolSearch');
+const schoolSug = $('#schoolSuggestions');
+const schoolIdHidden = $('#schoolId');
+
+let schoolTimer;
+schoolSearch?.addEventListener('input', () => {
+  const term = (schoolSearch.value || '').trim();
+  schoolIdHidden.value = '';
+  if (term.length < 2) { schoolSug.hidden = true; schoolSug.innerHTML = ''; return; }
+  clearTimeout(schoolTimer);
+  schoolTimer = setTimeout(async () => {
+    try {
+      const r = await fetch(`/api/salesforce-query?type=sekolah&term=${encodeURIComponent(term)}`);
+      const j = await r.json();
+      const items = j.records || [];
+      schoolSug.innerHTML = '';
+      items.forEach(it => {
+        const li = document.createElement('li');
+        li.textContent = it.Name;
+        li.addEventListener('click', () => {
+          schoolSearch.value = it.Name;
+          schoolIdHidden.value = it.NPSN__c || '';
+          schoolSug.hidden = true;
+          schoolSug.innerHTML = '';
+        });
+        schoolSug.appendChild(li);
+      });
+      schoolSug.hidden = items.length === 0;
+    } catch (e) {
+      schoolSug.hidden = true;
+      schoolSug.innerHTML = '';
+    }
+  }, 300);
+});
 
 $('#prevBtn4')?.addEventListener('click', () => goToStep(3));
 $('#nextBtn4')?.addEventListener('click', () => {
@@ -143,7 +278,7 @@ $('#nextBtn4')?.addEventListener('click', () => {
   goToStep(5);
 });
 
-// ===== Step 5: Pas Foto =====
+// ===== STEP 5: Pas Foto =====
 const MAX_PHOTO = 1 * 1024 * 1024;
 const ALLOWED_PHOTO = ['image/jpeg','image/png'];
 let photoDataURL = null;
@@ -169,6 +304,9 @@ photoIn?.addEventListener('change', e => {
     photoPrev.src = fr.result;
     photoPrev.style.display='block';
     $('#nextBtn5').disabled = false;
+
+    window.photoDataURL = photoDataURL;
+    window.photoFileName = photoFileName;
   };
   fr.readAsDataURL(file);
 });
@@ -176,25 +314,23 @@ photoIn?.addEventListener('change', e => {
 $('#prevBtn5')?.addEventListener('click', () => goToStep(4));
 $('#nextBtn5')?.addEventListener('click', () => {
   if (!photoDataURL) { photoErr.textContent = 'Unggah pas foto 3×4 terlebih dahulu.'; return; }
-  // isi ringkasan
   $('#sumName').textContent = `${$('#firstName').value} ${$('#lastName').value || ''}`.trim();
   $('#sumEmail').textContent = $('#email').value;
   $('#sumPhone').textContent = `+62${digits($('#phone').value)}`.replace('++','+');
-  $('#sumStudyProgram').textContent = $('#studyProgramSearch').value || $('#studyProgramName').value || '-';
   $('#sumCampus').textContent = $('#campusName').value || '-';
-  $('#sumIntake').textContent = $('#intakeSearch').value || '-';
+  $('#sumIntake').textContent = getSelectedText($('#intakeSelect')) || '-';
+  $('#sumStudyProgram').textContent = getSelectedText($('#studyProgramSelect')) || '-';
   $('#sumSchool').textContent = toggleSchoolManual?.checked ? ($('#schoolNameManual').value || '-') : ($('#schoolSearch').value || '-');
   $('#sumGradYear').textContent = $('#gradYear').value || '-';
   goToStep(6);
 });
 
-// ===== Step 6: Submit =====
+// ===== STEP 6: Submit =====
 $('#prevBtn6')?.addEventListener('click', () => goToStep(5));
 
 $('#submitBtn')?.addEventListener('click', async (e)=>{
   e.preventDefault();
-  const agree = $('#agreeTerms')?.checked;
-  if (!agree) { $('#agreeError').textContent = 'Harus menyetujui kebijakan.'; return; }
+  if (!$('#agreeTerms')?.checked) { $('#agreeError').textContent = 'Harus menyetujui kebijakan.'; return; }
   $('#agreeError').textContent = '';
 
   try {
@@ -211,17 +347,20 @@ $('#submitBtn')?.addEventListener('click', async (e)=>{
       lastName : $('#lastName').value.trim() || '-',
       email    : $('#email').value.trim(),
       phone    : phoneNorm,
-      studyProgramId   : $('#studyProgramId').value || null,
-      studyProgramName : $('#studyProgramSearch').value || null,
-      campusId         : $('#campusId').value || null,
-      campusName       : $('#campusName').value || null,
-      masterIntakeId   : $('#masterIntakeId').value || null,
-      schoolId         : $('#schoolId').value || null,
-      graduationYear   : $('#gradYear').value || null,
-      // bukti pembayaran (wajib)
-      paymentProof: paymentProofDataURL ? { dataUrl: paymentProofDataURL, fileName: paymentProofFileName || 'bukti-pembayaran' } : null,
-      // pas foto (wajib)
-      photo: photoDataURL ? { dataUrl: photoDataURL, fileName: photoFileName || 'pas-foto-3x4.jpg' } : null
+
+      campusId       : $('#campusId').value || null,
+      campusName     : $('#campusName').value || null,
+      masterIntakeId : $('#intakeSelect').value || null,
+      intakeName     : getSelectedText($('#intakeSelect')) || null,
+      studyProgramId : $('#studyProgramSelect').value || null,
+      studyProgramName : getSelectedText($('#studyProgramSelect')) || null,
+
+      schoolId       : $('#schoolId')?.value || null,
+      graduationYear : $('#gradYear')?.value || null,
+
+      // files
+      paymentProof: window.paymentProofDataURL ? { dataUrl: window.paymentProofDataURL, fileName: window.paymentProofFileName || 'bukti-pembayaran' } : null,
+      photo       : window.photoDataURL ? { dataUrl: window.photoDataURL, fileName: window.photoFileName || 'pas-foto-3x4.jpg' } : null,
     };
 
     const r = await fetch('/api/register', {

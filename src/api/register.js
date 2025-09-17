@@ -52,7 +52,7 @@ module.exports = async (req, res) => {
         FirstName: b.firstName || '',
         LastName : b.lastName  || '-',
         PersonEmail: b.email,
-        PersonMobilePhone: b.phone || null,
+        Phone: b.phone || null,
         ...(b.schoolId ? { MasterSchool__c: b.schoolId } : {})
       });
       if (!created.success) throw new Error(created.errors?.join(', ') || 'Gagal membuat Account');

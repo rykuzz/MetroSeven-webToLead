@@ -19,7 +19,7 @@ body {
   position: relative;
 }
 
-/* BG blur */
+/* EFEK LATAR BELAKANG BLURRY */
 body::before {
   content: '';
   position: fixed;
@@ -79,7 +79,7 @@ label { display: block; font-weight: 500; margin-bottom: 8px; color: var(--text-
 .suggestions li { padding: 10px 15px; cursor: pointer; }
 .suggestions li:hover, .suggestions li.selected { background: var(--primary-color); color: var(--white); }
 
-/* Checkbox manual school */
+/* Checkbox untuk input manual */
 .manual-trigger-group { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .manual-trigger-group label { margin: 0; font-size: 14px; color: var(--text-dark); font-weight: 500; cursor: pointer; }
 
@@ -87,15 +87,15 @@ label { display: block; font-weight: 500; margin-bottom: 8px; color: var(--text-
 .other-school-container { background-color: rgba(248, 249, 250, 0.8); border: 1px solid var(--border-color); border-radius: 8px; padding: 20px; margin-top: -10px; margin-bottom: 20px; }
 .manual-input-header { font-size: 14px; font-weight: 500; color: var(--text-dark); margin-bottom: 16px; }
 
-/* Buttons */
+/* Submit Button */
 .submit-btn { width: 100%; padding: 15px; background: var(--primary-color); color: var(--white); border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 16px; transition: background-color 0.2s ease; }
 .submit-btn:hover { background: var(--primary-hover); }
 .btn { padding: 12px 16px; border: 1px solid var(--border-color); background:#fff; border-radius: 8px; cursor:pointer; }
 
-/* Debug & error */
+/* Debug */
 .debug-info { margin-top: 24px; font-size: 12px; color: var(--text-light); white-space: pre-wrap; background: #f0f0f0; padding: 10px; border-radius: 4px; display:none; }
-.field-error { color:#e11d48; font-size:13px; margin-top:6px; }
-.note { font-size:13px; color:var(--text-light); margin-top:6px; }
+.field-error { color: #e11d48; font-size: 13px; margin-top: 6px; }
+.note { font-size: 13px; color: var(--text-light); margin-top: 6px; }
 
 /* Responsive */
 @media (max-width: 600px) {
@@ -104,32 +104,55 @@ label { display: block; font-weight: 500; margin-bottom: 8px; color: var(--text-
 }
 
 /* === Radio list (Campus) === */
-.radio-list {
-  display: grid;
-  gap: 10px;
-}
+.radio-list { display: grid; gap: 10px; }
 .radio-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border-color);
+  border-radius: 8px; background: #fff; cursor: pointer;
+}
+.radio-item:hover { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(52,152,219,0.08); }
+.radio-item input[type="radio"] { margin-top: 3px; }
+.radio-item .radio-title { font-weight: 600; color: var(--text-dark); }
+.radio-item .radio-sub { font-size: 13px; color: var(--text-light); }
+
+/* === VA Card (Step 1) === */
+.va-card {
   background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+.va-title { font-weight: 700; color: var(--text-dark); margin-bottom: 2px; }
+.va-sub { color: var(--text-light); margin-bottom: 12px; }
+.va-row {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0;
+}
+.va-row .label { color: var(--text-light); font-size: 14px; }
+.va-row .value { color: var(--text-dark); font-weight: 600; }
+.va-row .value.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0.5px;
+  background: #f8fafc;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.copy-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  background: #fff;
+  border-radius: 8px;
   cursor: pointer;
-}
-.radio-item:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(52,152,219,0.08);
-}
-.radio-item input[type="radio"] {
-  margin-top: 3px;
-}
-.radio-item .radio-title {
   font-weight: 600;
-  color: var(--text-dark);
-}
-.radio-item .radio-sub {
   font-size: 13px;
-  color: var(--text-light);
+}
+.copy-btn:hover { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(52,152,219,0.08); }
+
+@media (max-width: 600px) {
+  .va-row { grid-template-columns: 1fr; }
 }

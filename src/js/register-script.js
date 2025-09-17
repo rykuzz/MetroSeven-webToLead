@@ -1,4 +1,4 @@
-// ===== Utilities =====
+// ========= Helpers =========
 const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e).toLowerCase());
@@ -6,8 +6,7 @@ const digits  = (s) => String(s||'').replace(/\D/g,'');
 const isSfId  = (v) => /^[a-zA-Z0-9]{15,18}$/.test(String(v||''));
 
 function updateProgress(currentStep) {
-  const items = $$('#progressSteps .step-item');
-  items.forEach(li => {
+  $$('#progressSteps .step-item').forEach(li => {
     const step = Number(li.dataset.step);
     li.classList.toggle('is-active', step === currentStep);
     li.classList.toggle('is-complete', step < currentStep);
@@ -22,10 +21,10 @@ function goToStep(n){
 }
 window.goToStep = goToStep;
 
-// ===== VA (hardcode) =====
+// ========= VA (hardcode info) =========
 const VA_INFO = { bank: 'BCA', number: '8888800123456789', name: 'Metro Seven Admission' };
 document.addEventListener('DOMContentLoaded', () => {
-  $('#vaBank') && ($('#vaBank').textContent = VA_INFO.bank);
+  $('#vaBank')   && ($('#vaBank').textContent   = VA_INFO.bank);
   $('#vaNumber') && ($('#vaNumber').textContent = VA_INFO.number);
   updateProgress(1);
 });
@@ -34,15 +33,14 @@ document.addEventListener('click', async (e) => {
   if (!btn) return;
   const sel = document.querySelector(btn.dataset.copy);
   if (!sel) return;
-  const text = (sel.textContent || '').trim();
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText((sel.textContent || '').trim());
     const prev = btn.textContent; btn.textContent = 'Tersalin';
     setTimeout(() => (btn.textContent = prev), 1200);
-  } catch { alert('Gagal menyalin. Silakan salin manual.'); }
+  } catch { alert('Gagal menyalin.'); }
 });
 
-// ===== STEP 1: Payment Proof =====
+// ========= STEP 1: Bukti Pembayaran =========
 const MAX_PROOF = 5 * 1024 * 1024;
 const ALLOWED_PROOF = ['image/jpeg','image/png','application/pdf'];
 let paymentProofDataURL = null, paymentProofFileName = null;
@@ -58,27 +56,19 @@ if (proofInput) {
 
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-
     if (!ALLOWED_PROOF.includes(file.type)) { proofErr.textContent = 'File harus JPG/PNG atau PDF.'; return; }
     if (file.size > MAX_PROOF) { proofErr.textContent = 'Ukuran maksimal 5 MB.'; return; }
 
     paymentProofFileName = file.name || 'bukti-pembayaran';
 
-    // Preview
     proofPrev.style.display = 'flex';
     proofMeta.textContent = `${paymentProofFileName} • ${(file.size/1024/1024).toFixed(2)} MB`;
-    if (file.type.startsWith('image/')) {
-      const fr = new FileReader();
-      fr.onload = () => { paymentProofDataURL = fr.result; proofImg.src = fr.result; proofImg.style.display='block'; };
-      fr.readAsDataURL(file);
-    } else {
-      const fr = new FileReader();
-      fr.onload = () => { paymentProofDataURL = fr.result; };
-      fr.readAsDataURL(file);
-      proofImg.style.display='none';
-    }
-    nextBtn1.disabled = false;
 
+    const fr = new FileReader();
+    fr.onload = () => { paymentProofDataURL = fr.result; if (file.type.startsWith('image/')) { proofImg.src = fr.result; proofImg.style.display='block'; } else { proofImg.style.display='none'; } };
+    fr.readAsDataURL(file);
+
+    nextBtn1.disabled = false;
     window.paymentProofDataURL = paymentProofDataURL;
     window.paymentProofFileName = paymentProofFileName;
   });
@@ -86,7 +76,7 @@ if (proofInput) {
   nextBtn1?.addEventListener('click', () => goToStep(2));
 }
 
-// ===== STEP 2: Data Pemohon =====
+// ========= STEP 2: Data Pemohon =========
 $('#prevBtn2')?.addEventListener('click', () => goToStep(1));
 $('#nextBtn2')?.addEventListener('click', () => {
   const firstName = $('#firstName')?.value.trim();
@@ -98,7 +88,7 @@ $('#nextBtn2')?.addEventListener('click', () => {
   goToStep(3);
 });
 
-// ===== Helpers =====
+// ========= Helpers umum =========
 function setSelectOptions(selectEl, items, placeholder = '— Pilih —') {
   selectEl.innerHTML = '';
   const ph = document.createElement('option');
@@ -115,7 +105,7 @@ function getSelectedText(selectEl) {
   return i > -1 ? selectEl.options[i].textContent : '';
 }
 
-// ===== STEP 3: Campus → Intake → Program + YEAR PICKER =====
+// ========= STEP 3: Campus → Intake → Program =========
 let campusLoaded = false;
 
 async function loadCampuses() {
@@ -145,8 +135,13 @@ async function loadCampuses() {
     if (checked) {
       $('#campusId').value = checked.value;
       $('#campusName').value = checked.closest('label').querySelector('.radio-title').textContent;
+
+      // Muat Tahun Ajaran terlebih dahulu.
       await loadIntakes(checked.value);
-      await loadPrograms(checked.value, '');
+
+      // ❌ Jangan load program dulu; tunggu user pilih Tahun Ajaran
+      setSelectOptions($('#studyProgramSelect'), [], '— Pilih Tahun Ajaran dahulu —');
+      $('#studyProgramSelect').disabled = true;
     }
 
     container.addEventListener('change', async (e) => {
@@ -155,12 +150,14 @@ async function loadCampuses() {
         $('#campusId').value = campusId;
         $('#campusName').value = e.target.closest('label').querySelector('.radio-title').textContent;
 
-        setSelectOptions($('#intakeSelect'), [], '— Pilih Tahun Ajaran —');
-        setSelectOptions($('#studyProgramSelect'), [], '— Pilih Study Program —');
+        // Reset intake & program
+        setSelectOptions($('#intakeSelect'), [], '— Memuat Tahun Ajaran… —');
+        setSelectOptions($('#studyProgramSelect'), [], '— Pilih Tahun Ajaran dahulu —');
         $('#intakeSelect').disabled = true; $('#studyProgramSelect').disabled = true;
 
         await loadIntakes(campusId);
-        await loadPrograms(campusId, $('#intakeSelect').value || '');
+
+        // Program akan dimuat saat intakeSelect berubah
       }
     });
 
@@ -188,32 +185,43 @@ async function loadIntakes(campusId) {
 
 async function loadPrograms(campusId, intakeId) {
   const sel = $('#studyProgramSelect');
+  if (!intakeId) {
+    setSelectOptions(sel, [], '— Pilih Tahun Ajaran dahulu —');
+    sel.disabled = true;
+    return;
+  }
   try {
     sel.disabled = true;
     const q = new URLSearchParams({ type:'program', campusId, intakeId }).toString();
     const r = await fetch(`/api/salesforce-query?${q}`);
     const j = await r.json();
     const items = j.records || [];
-    setSelectOptions(sel, items, '— Pilih Study Program —');
-    sel.disabled = false;
+    if (!items.length) {
+      setSelectOptions(sel, [], '— Program belum tersedia untuk pilihan ini —');
+      sel.disabled = true;
+    } else {
+      setSelectOptions(sel, items, '— Pilih Study Program —');
+      sel.disabled = false;
+    }
   } catch (e) {
     console.error(e);
-    setSelectOptions(sel, [], '— Pilih Study Program —');
-    sel.disabled = false;
+    setSelectOptions(sel, [], '— Gagal memuat Study Program —');
+    sel.disabled = true;
   }
 }
 
-// === Year Picker (dropdown tahun) ===
+// Tahun lulus: 2025 ke atas (s/d current + 5)
 function populateGradYear() {
   const sel = $('#gradYear'); if (!sel) return;
   const current = new Date().getFullYear();
-  const start = 2005;
-  const end   = current + 2;
+  const start = 2025;
+  const end   = current + 5;
   const years = [];
   for (let y = end; y >= start; y--) years.push(String(y));
   setSelectOptions(sel, years, '— Pilih Tahun Lulus —');
 }
 
+// Init
 document.addEventListener('DOMContentLoaded', () => {
   loadCampuses();
   populateGradYear();
@@ -233,7 +241,7 @@ $('#nextBtn3')?.addEventListener('click', () => {
   goToStep(4);
 });
 
-// ===== STEP 4: Sekolah (autocomplete) =====
+// ========= STEP 4: Sekolah (autocomplete) =========
 const toggleSchoolManual = $('#schoolManualToggle');
 const otherSchoolBox = $('#otherSchoolContainer');
 toggleSchoolManual?.addEventListener('change', e => { otherSchoolBox.style.display = e.target.checked ? 'block' : 'none'; });
@@ -272,13 +280,12 @@ schoolSearch?.addEventListener('input', () => {
 $('#prevBtn4')?.addEventListener('click', () => goToStep(3));
 $('#nextBtn4')?.addEventListener('click', () => {
   if (!toggleSchoolManual?.checked && !isSfId($('#schoolId')?.value)) {
-    alert('Pilih sekolah dari daftar (bukan ketik manual).');
-    return;
+    alert('Pilih sekolah dari daftar (bukan ketik manual).'); return;
   }
   goToStep(5);
 });
 
-// ===== STEP 5: Pas Foto =====
+// ========= STEP 5: Pas Foto =========
 const MAX_PHOTO = 1 * 1024 * 1024;
 const ALLOWED_PHOTO = ['image/jpeg','image/png'];
 let photoDataURL = null, photoFileName = null;
@@ -319,7 +326,7 @@ $('#nextBtn5')?.addEventListener('click', () => {
   goToStep(6);
 });
 
-// ===== STEP 6: Submit =====
+// ========= STEP 6: Submit =========
 $('#prevBtn6')?.addEventListener('click', () => goToStep(5));
 
 $('#submitBtn')?.addEventListener('click', async (e)=>{
@@ -330,7 +337,6 @@ $('#submitBtn')?.addEventListener('click', async (e)=>{
   try {
     $('#submitBtn').disabled = true; $('#submitBtn').textContent = 'Mengirim…';
 
-    // normalisasi +62
     let ph = digits($('#phone').value || '');
     if (ph.startsWith('0')) ph = ph.slice(1);
     if (!ph.startsWith('62')) ph = `62${ph}`;
@@ -351,10 +357,8 @@ $('#submitBtn')?.addEventListener('click', async (e)=>{
 
       graduationYear : $('#gradYear').value || null,
 
-
       schoolId       : $('#schoolId')?.value && isSfId($('#schoolId').value) ? $('#schoolId').value : null,
 
-      // files
       paymentProof: window.paymentProofDataURL ? { dataUrl: window.paymentProofDataURL, fileName: window.paymentProofFileName || 'bukti-pembayaran' } : null,
       photo       : window.photoDataURL ? { dataUrl: window.photoDataURL, fileName: window.photoFileName || 'pas-foto-3x4.jpg' } : null,
     };

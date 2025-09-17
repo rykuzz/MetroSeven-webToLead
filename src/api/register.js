@@ -1,110 +1,175 @@
 const jsforce = require('jsforce');
 
-// POST /api/register
-module.exports = async (req, res) => {
-  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
+// --- util: dataURL -> base64 ---
+function dataUrlToBase64(dataUrl) {
+  if (!dataUrl) return null;
+  const m = dataUrl.match(/^data:([\w/+.-]+);base64,(.*)$/);
+  if (!m) return null;
+  return { mime: m[1], base64: m[2] };
+}
 
+// --- util: cari RecordType Person Account yang aktif ---
+async function getPersonAccountRecordTypeId(conn) {
+  // Cari RT Account yang mengandung 'Person' di Name/DeveloperName
+  const rt = await conn.query(`
+    SELECT Id, Name, DeveloperName
+    FROM RecordType
+    WHERE SobjectType = 'Account' AND IsActive = true
+  `);
+  const rec = (rt.records || []).find(
+    r => /person/i.test(r.Name || '') || /person/i.test(r.DeveloperName || '')
+  );
+  return rec ? rec.Id : null;
+}
+
+module.exports = async (req, res) => {
   if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
+  const {
+    firstName, lastName, email, phone,
+    campusId, campusName,
+    masterIntakeId, intakeName,            // opsional
+    studyProgramId, studyProgramName,
+    graduationYear,
+    schoolId,                               // Salesforce Id dari MasterSchool__c
+    paymentProof,                           // { dataUrl, fileName }
+    photo                                   // { dataUrl, fileName }
+  } = req.body || {};
+
+  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
   const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
 
   try {
     await conn.login(SF_USERNAME, SF_PASSWORD);
-    const {
-      firstName, lastName, email, phone,
-      campusId, masterIntakeId, studyProgramId,
-      graduationYear, schoolId,
-      studyProgramName,
-      paymentProof, photo
-    } = req.body || {};
 
-    // ----- Create Person Account (opsional; jika kamu sudah punya flow sendiri, lewati) -----
-    // Pastikan org kamu mengizinkan create IsPersonAccount dari API.
-    // Jika tidak, kamu bisa cari/merge existing account by email/phone.
-    const accountName = `${firstName} ${lastName || ''}`.trim();
-    let accountId;
+    // =========================================================================
+    // 1) Temukan / Buat PERSON ACCOUNT
+    // =========================================================================
+    let accountId = null;
 
-    try {
-      const acc = await conn.sobject('Account').create({
-        RecordTypeId: null,          // biarkan default Person Account
-        IsPersonAccount: true,       // butuh permission
-        FirstName: firstName,
-        LastName: lastName || '-',
-        PersonEmail: email,
-        Phone: phone,
-        Name: accountName
-      });
-      if (!acc.success) throw new Error('Failed to create Person Account');
-      accountId = acc.id;
-    } catch (e) {
-      // Jika tidak boleh set IsPersonAccount, fallback: cari existing by email
-      const existing = await conn.query(`
-        SELECT Id FROM Account WHERE PersonEmail = '${(email || '').replace(/'/g,"\\'")}' LIMIT 1
+    // Cari person account dari email (PersonEmail)
+    if (email) {
+      const accQ = await conn.query(`
+        SELECT Id FROM Account
+        WHERE IsPersonAccount = true AND PersonEmail = '${String(email).replace(/'/g, "\\'")}'
+        LIMIT 1
       `);
-      if (existing.totalSize > 0) {
-        accountId = existing.records[0].Id;
-      } else {
-        // buat business account biasa
-        const acc2 = await conn.sobject('Account').create({
-          Name: accountName
-        });
-        accountId = acc2.id;
+      if (accQ.totalSize > 0) {
+        accountId = accQ.records[0].Id;
       }
     }
 
-    // ----- Create Opportunity (Application Progress) -----
-    const oppName = `REG - ${studyProgramName || 'Program'} - ${accountName}`;
+    // Buat Person Account bila belum ada
+    if (!accountId) {
+      // Dapatkan RecordTypeId untuk Person Account
+      const paRtId = await getPersonAccountRecordTypeId(conn);
+
+      // Siapkan payload Account (Person)
+      const accBody = {
+        FirstName: firstName || '',
+        LastName : (lastName && lastName.trim()) ? lastName.trim() : (firstName || 'Applicant'),
+        PersonEmail: email || '',
+        Phone: phone || ''
+      };
+
+      // Jika ketemu record type person → pakai RT; kalau tidak, coba IsPersonAccount=true
+      if (paRtId) {
+        accBody.RecordTypeId = paRtId;
+      } else {
+        accBody.IsPersonAccount = true; // fallback; butuh permission
+      }
+
+      const accIns = await conn.sobject('Account').create(accBody);
+      if (!accIns.success) {
+        throw new Error(
+          (accIns.errors && accIns.errors[0] && accIns.errors[0].message) ||
+          'Gagal membuat Person Account'
+        );
+      }
+      accountId = accIns.id;
+    }
+
+    // =========================================================================
+    // 2) Buat OPPORTUNITY ter-hubung ke Person Account
+    // =========================================================================
     const today = new Date();
-    const isoDate = today.toISOString().slice(0,10);
+    const closeDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30)
+      .toISOString().slice(0, 10);
 
-    const oppPayload = {
-      Name: oppName,
-      StageName: 'Booking Form',               // default stage
-      CloseDate: isoDate,
+    const oppBody = {
+      Name: `REG - ${firstName || ''} ${lastName || ''} - ${studyProgramName || 'Program'}`.trim(),
+      AccountId: accountId,                          // 🔗 link ke Person Account
+      StageName: 'Booking Form',                     // default stage
+      CloseDate: closeDate,
 
-      AccountId: accountId,                    // Applicant Name (Lookup Account/Applicant)
+      // Lookups/fields di org kamu
       Campus__c: campusId || null,
-      Master_Intake__c: masterIntakeId || null,
+      Master_Intake__c: masterIntakeId || null,      // opsional
       Study_Program__c: studyProgramId || null,
       Graduation_Year__c: graduationYear ? Number(graduationYear) : null,
+      Master_School__c: schoolId || null,             // ✅ pakai MasterSchool__c (benar)
 
-      Master_School__c: schoolId || null,       
-
-      Booking_Fee_Amount__c: 300000,           
-      Is_Booking_Fee_Paid__c: !!paymentProof,  
+      // Booking fee
+      Booking_Fee_Amount__c: 300000,
+      Is_Booking_Fee_Paid__c: !!paymentProof         // true jika ada bukti bayar
     };
 
-    const oppRes = await conn.sobject('Opportunity').create(oppPayload);
-    if (!oppRes.success) throw new Error('Gagal membuat Opportunity');
-    const oppId = oppRes.id;
+    // buang key yang null/undefined supaya aman di org yg tidak punya field opsional
+    Object.keys(oppBody).forEach(k => (oppBody[k] === null || oppBody[k] === undefined) && delete oppBody[k]);
 
-    // ----- helper upload ContentVersion -----
-    const uploadContent = async (file, title) => {
-      if (!file || !file.dataUrl) return null;
-      const m = String(file.dataUrl).match(/^data:(.*?);base64,(.*)$/);
-      if (!m) return null;
-      const contentType = m[1] || 'application/octet-stream';
-      const base64Body  = m[2];
+    const oppIns = await conn.sobject('Opportunity').create(oppBody);
+    if (!oppIns.success) {
+      throw new Error(
+        (oppIns.errors && oppIns.errors[0] && oppIns.errors[0].message) ||
+        'Gagal membuat Opportunity'
+      );
+    }
+    const opportunityId = oppIns.id;
 
-      const cv = await conn.sobject('ContentVersion').create({
-        Title: title || (file.fileName || 'file'),
-        PathOnClient: file.fileName || 'file',
-        VersionData: base64Body,
-        FirstPublishLocationId: oppId, // auto-link ke Opp
+    // =========================================================================
+    // 3) Upload dokumen (ContentVersion) & tautkan ke Opportunity
+    // =========================================================================
+    async function uploadAndLink(fileObj, fallbackName) {
+      if (!fileObj || !fileObj.dataUrl) return null;
+      const parsed = dataUrlToBase64(fileObj.dataUrl);
+      if (!parsed) return null;
+
+      const safeName = (fileObj.fileName || fallbackName || 'file').replace(/[^\w.\- ]/g, '_');
+
+      const cvRes = await conn.sobject('ContentVersion').create({
+        Title: safeName.replace(/\.[^.]+$/, ''),
+        PathOnClient: safeName,
+        VersionData: parsed.base64
       });
-      return cv;
-    };
+      if (!cvRes.success) return null;
 
-    // Upload bukti pembayaran & pas foto
-    await uploadContent(paymentProof, 'Bukti Pembayaran');
-    await uploadContent(photo, 'Pas Foto 3x4');
+      // Ambil ContentDocumentId dari ContentVersion
+      const cv = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cvRes.id}'`);
+      const docId = cv.records?.[0]?.ContentDocumentId;
+      if (!docId) return null;
 
-    return res.status(200).json({ success: true, id: oppId });
+      // Link ke Opportunity
+      await conn.sobject('ContentDocumentLink').create({
+        ContentDocumentId: docId,
+        LinkedEntityId: opportunityId,
+        ShareType: 'V' // Viewer
+      });
+
+      return docId;
+    }
+
+    // Bukti pembayaran → trigger Is_Booking_Fee_Paid__c = true (sudah di body)
+    await uploadAndLink(paymentProof, 'Bukti_Pembayaran');
+
+    // Pas foto 3x4
+    await uploadAndLink(photo, 'Pas_Foto_3x4');
+
+    return res.status(200).json({ success: true, opportunityId });
 
   } catch (err) {
-    console.error('Register Error:', err);
-    return res.status(500).json({ success: false, message: err.message || 'Gagal memproses pendaftaran' });
+    console.error('Register API error:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Gagal proses registrasi' });
   }
 };

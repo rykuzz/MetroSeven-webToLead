@@ -3,14 +3,29 @@ const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e).toLowerCase());
 const digits  = (s) => String(s||'').replace(/\D/g,'');
-function goToStep(n){ $$('.form-step').forEach(sec => sec.hidden = sec.getAttribute('data-step') !== String(n)); window.scrollTo({top:0,behavior:'smooth'}); }
+
+// Progress helper: tandai step complete/active
+function updateProgress(currentStep) {
+  const items = $$('#progressSteps .step-item');
+  items.forEach(li => {
+    const step = Number(li.dataset.step);
+    li.classList.toggle('is-active', step === currentStep);
+    li.classList.toggle('is-complete', step < currentStep);
+    if (step === currentStep) li.setAttribute('aria-current', 'step');
+    else li.removeAttribute('aria-current');
+  });
+}
+function goToStep(n){
+  $$('.form-step').forEach(sec => sec.hidden = sec.getAttribute('data-step') !== String(n));
+  updateProgress(n);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
 window.goToStep = goToStep;
 
-// ===== Hardcode Virtual Account (BARU) =====
-// Ganti sesuai kebutuhanmu
+// ===== Hardcode Virtual Account =====
 const VA_INFO = {
-  bank: 'BCA',                            // contoh: BCA / BNI / BRI / Mandiri
-  number: '8888800123456789',             // <<— NOMOR VA HARDCODE
+  bank: 'BCA',
+  number: '8888800123456789',
   name: 'Metro Seven Admission'
 };
 
@@ -20,6 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const numEl  = $('#vaNumber');
   if (bankEl) bankEl.textContent = VA_INFO.bank;
   if (numEl)  numEl.textContent  = VA_INFO.number;
+
+  // init progress di step 1
+  updateProgress(1);
 });
 
 // Tombol Salin VA

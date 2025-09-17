@@ -139,7 +139,7 @@ async function loadCampuses() {
       $('#campusId').value = checked.value;
       $('#campusName').value = checked.closest('label').querySelector('.radio-title').textContent;
 
-      // optional: tetap tampilkan Tahun Ajaran (tidak mempengaruhi program)
+      // optional: tetap tampilkan Tahun Ajaran
       await loadIntakes(checked.value);
 
       // langsung muat Study Program by Campus

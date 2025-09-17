@@ -21,13 +21,32 @@
       <p>Lengkapi langkah-langkah di bawah ini untuk mendaftar.</p>
     </div>
 
-    <ol class="progress-steps" style="display:flex;gap:16px;margin-bottom:18px;list-style:none;color:#64748b;font-size:14px">
-      <li>1. Bukti Pembayaran</li>
-      <li>2. Data Pemohon</li>
-      <li>3. Preferensi Studi</li>
-      <li>4. Sekolah</li>
-      <li>5. Upload Pas Foto</li>
-      <li>6. Review & Submit</li>
+    <!-- PROGRESS STEPS (baru, bisa berubah warna) -->
+    <ol id="progressSteps" class="progress-steps" role="list" aria-label="Progress pendaftaran">
+      <li class="step-item is-active" data-step="1" aria-current="step">
+        <span class="step-index">1</span>
+        <span class="step-label">Bukti Pembayaran</span>
+      </li>
+      <li class="step-item" data-step="2">
+        <span class="step-index">2</span>
+        <span class="step-label">Data Pemohon</span>
+      </li>
+      <li class="step-item" data-step="3">
+        <span class="step-index">3</span>
+        <span class="step-label">Preferensi Studi</span>
+      </li>
+      <li class="step-item" data-step="4">
+        <span class="step-index">4</span>
+        <span class="step-label">Sekolah</span>
+      </li>
+      <li class="step-item" data-step="5">
+        <span class="step-index">5</span>
+        <span class="step-label">Upload Pas Foto</span>
+      </li>
+      <li class="step-item" data-step="6">
+        <span class="step-index">6</span>
+        <span class="step-label">Review & Submit</span>
+      </li>
     </ol>
 
     <!-- ============ STEP 1: BUKTI PEMBAYARAN ============ -->
@@ -35,7 +54,7 @@
       <h3>Unggah Bukti Pembayaran</h3>
       <p>Terima JPG/PNG atau PDF. Maksimal 5 MB.</p>
 
-      <!-- KARTU VIRTUAL ACCOUNT (BARU) -->
+      <!-- KARTU VIRTUAL ACCOUNT -->
       <div class="va-card" role="group" aria-label="Info Virtual Account">
         <div class="va-title">Transfer Virtual Account</div>
         <div class="va-sub">Atas nama <strong>Metro Seven Admission</strong></div>

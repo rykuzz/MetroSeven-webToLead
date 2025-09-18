@@ -14,19 +14,39 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // Update Stage -> Registration
-    await conn.sobject('Opportunity').update({ Id: opportunityId, StageName: 'Registration' });
-
-    // Fetch data for credentials
-    const acc = await conn.sobject('Account').retrieve(accountId);
+    // -------- Ambil data untuk penyusunan nama & kredensial --------
+    // Ambil Opportunity (butuh BSP untuk nama)
     const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
+    // Ambil Account (Person Account: FirstName/LastName)
+    const acc = await conn.sobject('Account').retrieve(accountId);
 
-    const first = (acc.FirstName || '').toLowerCase();
-    const last  = (acc.LastName  || '').toLowerCase();
-    const username = `${first}${last}`.replace(/\s+/g,'');
+    // Ambil nama BSP jika ada
+    let bspName = '';
+    if (opp.Batch_Study_Program__c) {
+      const bsp = await conn
+        .sobject('Batch_Study_Program__c')
+        .retrieve(opp.Batch_Study_Program__c);
+      bspName = bsp?.Name || '';
+    }
 
+    // Susun nama Opportunity sesuai brief:
+    // "FirstName LastName/REG/Batch Study Program Name"
+    const first = (acc.FirstName || '').trim();
+    const last  = (acc.LastName  || '').trim();
+    const base  = `${first} ${last}`.trim();
+    const newOppName = bspName ? `${base}/REG/${bspName}` : `${base}/REG`;
+
+    // -------- Update Stage & Name pada Opportunity --------
+    await conn.sobject('Opportunity').update({
+      Id: opportunityId,
+      StageName: 'Registration',
+      Name: newOppName
+    });
+
+    // -------- Generate & simpan credentials --------
     const year = (opp.CreatedDate || '').slice(0,4) || (new Date().getFullYear().toString());
-    const passwordPlain = `m7u${first}${year}`;
+    const username = `${first}${last}`.replace(/\s+/g,'').toLowerCase();
+    const passwordPlain = `m7u${first.toLowerCase()}${year}`;
     const passwordHash = crypto.createHash('sha256').update(passwordPlain).digest('hex');
 
     await conn.sobject('Account').update({ Id: accountId, Password__c: passwordHash });

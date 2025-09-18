@@ -7,7 +7,7 @@
     "start": "vercel dev"
   },
   "dependencies": {
-    "jsforce": "^2.0.0",
+    "jsforce": "^1.11.0",
     "multiparty": "^4.2.3"
   }
 }

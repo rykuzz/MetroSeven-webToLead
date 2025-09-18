@@ -1,16 +1,11 @@
-// src/api/register-upload-photo.js
 const jsforce = require('jsforce');
 const multiparty = require('multiparty');
 
 const MAX_SIZE = 1024 * 1024;
-const ALLOWED = ['image/png', 'image/jpeg'];
+const ALLOWED = ['image/png','image/jpeg','image/jpg'];
 
 function sanitizeName(s) {
-  return String(s || '')
-    .trim()
-    .replace(/[\\/:*?"<>|]/g, '-')   // karakter ilegal di filename
-    .replace(/\s+/g, ' ')
-    .slice(0, 80);
+  return String(s || '').trim().replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').slice(0, 80);
 }
 function yyyymmdd(d = new Date()) {
   const z = (n) => String(n).padStart(2, '0');
@@ -18,8 +13,7 @@ function yyyymmdd(d = new Date()) {
 }
 
 module.exports = async (req, res) => {
-  if (req.method !== 'POST')
-    return res.status(405).json({ success: false, message: 'Method not allowed' });
+  if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
 
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
   const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
@@ -41,7 +35,7 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // Ambil nama Account untuk pola nama file
+    // Nama Account untuk title
     const acc = await conn.sobject('Account').retrieve(accountId);
     const accName = sanitizeName(acc?.Name || accountId);
     const stamp = yyyymmdd();
@@ -51,22 +45,20 @@ module.exports = async (req, res) => {
     const buff = fs.readFileSync(file.path);
     const base64 = buff.toString('base64');
 
-    // Pertahankan ekstensi sumber (png/jpg), Title mengikuti pola
     const ext = (path.extname(file.originalFilename || '.jpg') || '.jpg').replace('.', '').toLowerCase();
     const title = `PasFoto-${accName}-${stamp}`;
 
+    // File → Opportunity
     const cv = await conn.sobject('ContentVersion').create({
       Title: title,
       PathOnClient: `${title}.${ext}`,
       VersionData: base64,
-      FirstPublishLocationId: opportunityId, // tampil di dokumen Opportunity
+      FirstPublishLocationId: opportunityId
     });
     if (!cv.success) throw new Error(cv.errors?.join(', ') || 'Gagal upload pas foto');
 
-    // Kaitkan juga ke Account agar muncul di tab Documents Account
-    const q = await conn.query(
-      `SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cv.id}' LIMIT 1`
-    );
+    // Optional: link juga ke Account
+    const q = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cv.id}' LIMIT 1`);
     const docId = q.records?.[0]?.ContentDocumentId;
     if (docId) {
       await conn.sobject('ContentDocumentLink').create({
@@ -79,8 +71,6 @@ module.exports = async (req, res) => {
     return res.status(200).json({ success: true, contentVersionId: cv.id });
   } catch (err) {
     console.error('register-upload-photo ERR:', err);
-    return res
-      .status(500)
-      .json({ success: false, message: err.message || 'Upload pas foto gagal' });
+    return res.status(500).json({ success: false, message: err.message || 'Upload pas foto gagal' });
   }
 };

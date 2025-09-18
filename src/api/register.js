@@ -1,98 +1,160 @@
-const jsforce = require('jsforce');
+// src/api/register.js
+import jsforce from 'jsforce';
 
-function digits(s){ return String(s||'').replace(/\D/g,''); }
-function normalizePhone(raw){
-  let p = digits(raw||''); if(!p) return null;
-  if(p.startsWith('0')) p = p.slice(1);
-  if(!p.startsWith('62')) p = '62'+p;
-  return '+'+p;
+function req(v, name) {
+  if (!v) throw new Error(`${name} is required`);
+  return v;
 }
 
-const OPP_RT_UNIVERSITY_FALLBACK = '012gL000002NZITQA4';
-
-async function getOppUniversityRT(conn) {
-  const r = await conn.query(
-    "SELECT Id FROM RecordType WHERE SobjectType='Opportunity' AND Name='University' LIMIT 1"
+async function login() {
+  const conn = new jsforce.Connection({ loginUrl: process.env.SF_LOGIN_URL });
+  await conn.login(
+    process.env.SF_USERNAME,
+    process.env.SF_PASSWORD + process.env.SF_TOKEN
   );
-  return r.records?.[0]?.Id || null;
-}
-async function getPersonAccountRT(conn) {
-  const r = await conn.query(
-    "SELECT Id FROM RecordType WHERE SobjectType='Account' AND IsPersonType=true LIMIT 1"
-  );
-  return r.records?.[0]?.Id || null;
+  return conn;
 }
 
-module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
-
-  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
-  const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
-
+async function getOppRT(conn) {
+  // Kamu minta pakai RT "University" (ID: 012gL000002NZITQA4) – kita cek lalu fallback cari by name.
+  const hard = '012gL000002NZITQA4';
   try {
-    const { firstName, lastName, email, phone } = req.body || {};
-    if(!firstName || !lastName || !email || !phone) throw new Error('Data tidak lengkap');
+    const rt = await conn.sobject('RecordType').retrieve(hard);
+    if (rt && rt.SobjectType === 'Opportunity') return hard;
+  } catch {}
+  const r = await conn.query(`
+    SELECT Id FROM RecordType
+    WHERE SobjectType='Opportunity' AND (DeveloperName='University' OR Name='University')
+    LIMIT 1
+  `);
+  return r.records?.[0]?.Id || hard;
+}
 
-    await conn.login(SF_USERNAME, SF_PASSWORD);
+async function ensurePersonRT(conn) {
+  const r = await conn.query(`
+    SELECT Id FROM RecordType
+    WHERE SobjectType='Account' AND IsPersonType=true LIMIT 1
+  `);
+  return r.records?.[0]?.Id;
+}
 
-    // Cari Lead by email + phone (longgar)
-    const phoneDigits = digits(normalizePhone(phone));
-    const soqlLead = `
-      SELECT Id, Email, Phone, Is_Convert__c, ConvertedOpportunityId
+async function createDirect(conn, { firstName, lastName, email, phone }) {
+  const personRT = await ensurePersonRT(conn);
+
+  // 1) Person Account
+  const accRes = await conn.sobject('Account').create({
+    RecordTypeId: personRT,
+    FirstName: firstName,
+    LastName: lastName || '-',
+    PersonEmail: email,
+    PersonHomePhone: phone
+  });
+
+  // 2) Contact (auto) – ambil dari query
+  const c = await conn.query(
+    `SELECT Id FROM Contact WHERE AccountId='${accRes.id}' LIMIT 1`
+  );
+
+  // 3) Opportunity (RT University), Name: "FirstName LastName/REG"
+  const oppRes = await conn.sobject('Opportunity').create({
+    Name: `${firstName || ''} ${lastName || ''}/REG`.trim(),
+    AccountId: accRes.id,
+    StageName: 'Prospecting',
+    CloseDate: new Date().toISOString().slice(0, 10),
+    RecordTypeId: await getOppRT(conn)
+  });
+
+  return {
+    accountId: accRes.id,
+    contactId: c.records?.[0]?.Id || null,
+    opportunityId: oppRes.id
+  };
+}
+
+async function pollConvertedTriple(conn, leadId, timeoutMs = 6000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const l = await conn.sobject('Lead').retrieve(leadId);
+    if (l.IsConverted) {
+      return {
+        accountId: l.ConvertedAccountId,
+        contactId: l.ConvertedContactId,
+        opportunityId: l.ConvertedOpportunityId
+      };
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return null; // biar kita fallback cari manual
+}
+
+export default async function handler(req, res) {
+  try {
+    if (req.method !== 'POST') return res.status(405).end();
+
+    const { firstName, lastName = '', email, phone } = req.body || {};
+    req && req; // silence lint
+    req(email, 'email'); req(phone, 'phone'); req(firstName, 'firstName');
+
+    const conn = await login();
+
+    // Cek Lead by email+phone (exact)
+    const qLead = await conn.query(`
+      SELECT Id, IsConverted, ConvertedAccountId, ConvertedContactId, ConvertedOpportunityId
       FROM Lead
-      WHERE Email = :email AND (Phone LIKE :p1 OR Phone LIKE :p2)
-      ORDER BY CreatedDate DESC
+      WHERE Email='${email.replace(/'/g, "\\'")}'
+        AND Phone='${phone.replace(/'/g, "\\'")}'
       LIMIT 1
-    `;
-    const p1 = '%+' + phoneDigits + '%';
-    const p2 = '%' + (phoneDigits.startsWith('62') ? phoneDigits.slice(2) : phoneDigits) + '%';
-    const leadRes = await conn.query(soqlLead, { email: String(email).toLowerCase(), p1, p2 });
-    const lead = leadRes.records?.[0];
+    `);
 
-    if (lead) {
-      if (lead.ConvertedOpportunityId) {
-        const opp = await conn.sobject('Opportunity').retrieve(lead.ConvertedOpportunityId);
-        return res.status(200).json({ success:true, opportunityId: opp.Id, accountId: opp.AccountId });
+    if (qLead.totalSize > 0) {
+      const lead = qLead.records[0];
+
+      // Kalau SUDAH converted → langsung kirim triple
+      if (lead.IsConverted) {
+        return res.json({
+          status: 'ok',
+          source: 'lead-converted',
+          accountId: lead.ConvertedAccountId,
+          contactId: lead.ConvertedContactId,
+          opportunityId: lead.ConvertedOpportunityId
+        });
       }
-      // cukup set flag — Apex kamu yang convert
-      await conn.sobject('Lead').update(
-        { Id: lead.Id, Is_Convert__c: true },
-        { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' } }
-      );
-      return res.status(200).json({ success:true, message:'Lead ditandai Is_Convert__c = true (menunggu auto-convert).' });
+
+      // Belum converted → triger Apex auto-convert via flag Is_Convert__c
+      // (gunakan salah satu nama field sesuai org kamu)
+      try { await conn.sobject('Lead').update({ Id: lead.Id, Is_Convert__c: true }); }
+      catch { await conn.sobject('Lead').update({ Id: lead.Id, Is_Convert__c__c: true }).catch(()=>{}); }
+
+      // Tunggu sampai converted (polling ringan)
+      const triple = await pollConvertedTriple(conn, lead.Id);
+      if (triple) {
+        return res.json({ status: 'ok', source: 'lead-converted-now', ...triple });
+      }
+
+      // Fallback (kalau trigger async): cari Contact/Account/Opportunity by email
+      const c = await conn.query(`SELECT Id, AccountId FROM Contact WHERE Email='${email.replace(/'/g, "\\'")}' LIMIT 1`);
+      let opportunityId = null;
+      if (c.totalSize > 0) {
+        const o = await conn.query(`
+          SELECT Id FROM Opportunity
+          WHERE AccountId='${c.records[0].AccountId}'
+          ORDER BY CreatedDate DESC LIMIT 1
+        `);
+        opportunityId = o.records?.[0]?.Id || null;
+      }
+      return res.json({
+        status: 'ok',
+        source: 'lead-convert-pending',
+        accountId: c.records?.[0]?.AccountId || null,
+        contactId: c.records?.[0]?.Id || null,
+        opportunityId
+      });
     }
 
-    // Tidak ada lead → buat Person Account + Opportunity (RT University)
-    const personRT = await getPersonAccountRT(conn);
-    const oppRT    = (await getOppUniversityRT(conn)) || OPP_RT_UNIVERSITY_FALLBACK;
-
-    const accIns = {
-      RecordTypeId: personRT || undefined,
-      LastName: lastName,
-      FirstName: firstName,
-      PersonEmail: String(email).toLowerCase(),
-      PersonMobilePhone: normalizePhone(phone),
-    };
-    const acc = await conn.sobject('Account').create(accIns);
-    if(!acc.success) throw new Error(acc.errors?.join(', ') || 'Gagal membuat Account');
-
-    const closeDate = new Date(); closeDate.setDate(closeDate.getDate()+30);
-    const oppIns = {
-      RecordTypeId: oppRT, // University by name (fallback id)
-      AccountId: acc.id,
-      Name: `${firstName} ${lastName}/REG`,
-      StageName: 'Booking Form',
-      CloseDate: closeDate.toISOString().slice(0,10),
-    };
-    const opp = await conn.sobject('Opportunity').create(
-      oppIns,
-      { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' } }
-    );
-    if(!opp.success) throw new Error(opp.errors?.join(', ') || 'Gagal membuat Opportunity');
-
-    return res.status(200).json({ success:true, opportunityId: opp.id, accountId: acc.id });
-  } catch (err) {
-    console.error('register (lead) ERR:', err);
-    return res.status(500).json({ success:false, message: err.message || 'Gagal memproses' });
+    // Lead tidak ada → langsung create Person Account + Contact + Opportunity
+    const created = await createDirect(conn, { firstName, lastName, email, phone });
+    res.json({ status: 'ok', source: 'direct-create', ...created });
+  } catch (e) {
+    res.status(400).json({ status: 'error', message: e.message || String(e) });
   }
-};
+}

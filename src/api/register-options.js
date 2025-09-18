@@ -1,4 +1,11 @@
+// fixed: remove Apex-style bind vars (:) from SOQL + correct name update
 const jsforce = require('jsforce');
+
+function escSOQL(v){ return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function inList(ids){
+  if(!ids || !ids.length) return "()";
+  return "(" + ids.map(id => "'" + escSOQL(id) + "'").join(",") + ")";
+}
 
 module.exports = async (req, res) => {
   const { method, query, body } = req;
@@ -18,35 +25,32 @@ module.exports = async (req, res) => {
 
       if (type === 'intakes') {
         const { campusId } = query;
-        const soql = `
-          SELECT Id, Name, Start_Date__c, End_Date__c
-          FROM Master_Intake__c
-          WHERE Campus__c = :campusId
-          ORDER BY Start_Date__c DESC
-        `;
-        const r = await conn.query(soql, { campusId });
+        const soql =
+          "SELECT Id, Name, Start_Date__c, End_Date__c " +
+          "FROM Master_Intake__c " +
+          "WHERE Campus__c = '" + escSOQL(campusId) + "' " +
+          "ORDER BY Start_Date__c DESC";
+        const r = await conn.query(soql);
         return res.status(200).json({ success:true, records: r.records });
       }
 
       if (type === 'programs') {
         const { campusId, intakeId } = query;
-        // Dapatkan Faculty_Campus__c
-        const fc = await conn.query("SELECT Id FROM Faculty_Campus__c WHERE Campus__c = :campusId LIMIT 100", { campusId });
+        const fc = await conn.query("SELECT Id FROM Faculty_Campus__c WHERE Campus__c = '" + escSOQL(campusId) + "' LIMIT 100");
         const fcIds = (fc.records||[]).map(x=>x.Id);
         if (!fcIds.length) return res.status(200).json({ success:true, records: [] });
 
-        const soql = `
-          SELECT Id, Study_Program__r.Id, Study_Program__r.Name
-          FROM Study_Program_Faculty_Campus__c
-          WHERE Faculty_Campus__c IN :fcIds
-          AND   Id IN (
-            SELECT Study_Program_Faculty_Campus__c
-            FROM Study_Program_Intake__c
-            WHERE Master_Intake__c = :intakeId
-          )
-          ORDER BY Study_Program__r.Name
-        `;
-        const r = await conn.query(soql, { fcIds, intakeId });
+        const soql =
+          "SELECT Id, Study_Program__r.Id, Study_Program__r.Name " +
+          "FROM Study_Program_Faculty_Campus__c " +
+          "WHERE Faculty_Campus__c IN " + inList(fcIds) + " " +
+          "AND   Id IN ( " +
+          "  SELECT Study_Program_Faculty_Campus__c " +
+          "  FROM Study_Program_Intake__c " +
+          "  WHERE Master_Intake__c = '" + escSOQL(intakeId) + "'" +
+          ") " +
+          "ORDER BY Study_Program__r.Name";
+        const r = await conn.query(soql);
         const records = (r.records||[]).map(x=>({
           Id: x.Id,
           StudyProgramId: x.Study_Program__r.Id,
@@ -57,30 +61,27 @@ module.exports = async (req, res) => {
 
       if (type === 'masterBatch') {
         const { intakeId, date } = query;
-        const soql = `
-          SELECT Id, Name, Batch_Start_Date__c, Batch_End_Date__c
-          FROM Master_Batches__c
-          WHERE Intake__c = :intakeId
-          AND Batch_Start_Date__c <= :dateVal
-          AND Batch_End_Date__c >= :dateVal
-          ORDER BY Batch_Start_Date__c DESC
-          LIMIT 1
-        `;
-        const r = await conn.query(soql, { intakeId, dateVal: date });
+        const soql =
+          "SELECT Id, Name, Batch_Start_Date__c, Batch_End_Date__c " +
+          "FROM Master_Batches__c " +
+          "WHERE Intake__c = '" + escSOQL(intakeId) + "' " +
+          "AND Batch_Start_Date__c <= " + escSOQL(date) + " " +
+          "AND Batch_End_Date__c >= " + escSOQL(date) + " " +
+          "ORDER BY Batch_Start_Date__c DESC LIMIT 1";
+        const r = await conn.query(soql);
         const rec = r.records?.[0];
         return res.status(200).json({ success:true, id: rec?.Id || null, name: rec?.Name || null });
       }
 
       if (type === 'bsp') {
         const { masterBatchId, studyProgramId } = query;
-        const soql = `
-          SELECT Id, Name
-          FROM Batch_Study_Program__c
-          WHERE Master_Batch__c  = :masterBatchId
-          AND   Study_Program__c = :studyProgramId
-          LIMIT 1
-        `;
-        const r = await conn.query(soql, { masterBatchId, studyProgramId });
+        const soql =
+          "SELECT Id, Name " +
+          "FROM Batch_Study_Program__c " +
+          "WHERE Master_Batch__c  = '" + escSOQL(masterBatchId) + "' " +
+          "AND   Study_Program__c = '" + escSOQL(studyProgramId) + "' " +
+          "LIMIT 1";
+        const r = await conn.query(soql);
         const rec = r.records?.[0];
         return res.status(200).json({ success:true, id: rec?.Id || null, name: rec?.Name || null });
       }
@@ -89,7 +90,6 @@ module.exports = async (req, res) => {
     }
 
     if (method === 'POST') {
-      // Simpan BSP ke Opportunity + update Name → "First Last/REG/{BSP.Name}"
       if (body?.action === 'saveReg') {
         const { opportunityId, bspId } = body;
         if (!opportunityId || !bspId) throw new Error('Param kurang');
@@ -99,16 +99,10 @@ module.exports = async (req, res) => {
           conn.sobject('Opportunity').retrieve(opportunityId),
         ]);
 
-        // Base name adalah "First Last/REG"
         const baseName = (opp.Name || '').split('/REG')[0] + '/REG';
         const newName = `${baseName}/${bsp.Name}`;
 
-        await conn.sobject('Opportunity').update({
-          Id: opportunityId,
-          Batch_Study_Program__c: bspId,
-          Name: newName
-        });
-
+        await conn.sobject('Opportunity').update({ Id: opportunityId, Batch_Study_Program__c: bspId, Name: newName });
         return res.status(200).json({ success:true });
       }
 

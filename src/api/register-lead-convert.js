@@ -1,4 +1,3 @@
-// fixed: remove Apex-style bind vars (:) from SOQL
 const jsforce = require('jsforce');
 
 function digits(s){ return String(s||'').replace(/\D/g,''); }
@@ -8,9 +7,7 @@ function normalizePhone(raw){
   if(!p.startsWith('62')) p = '62'+p;
   return '+'+p;
 }
-function escSOQL(v){
-  return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-}
+function escSOQL(v){ return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
@@ -55,7 +52,6 @@ module.exports = async (req, res) => {
       return res.status(200).json({ success:true, message:'Lead ditandai untuk konversi' });
     }
 
-    // Lead tidak ada → langsung buat Person Account + Opportunity
     const personRT = await getPersonAcctRT();
     const oppRT    = await getOppUniversityRT();
 
@@ -66,4 +62,21 @@ module.exports = async (req, res) => {
       PersonEmail: email.toLowerCase(),
       PersonMobilePhone: normalizePhone(phone)
     });
-    if(!acc.success) throw new Error(acc.errors?.
+    if(!acc.success) throw new Error(acc.errors?.join(', ') || 'Gagal membuat Account');
+
+    const closeDate = new Date(); closeDate.setDate(closeDate.getDate()+30);
+    const opp = await conn.sobject('Opportunity').create({
+      RecordTypeId: oppRT || undefined,
+      AccountId: acc.id,
+      Name: `${firstName} ${lastName}/REG`,
+      StageName: 'Booking Form',
+      CloseDate: closeDate.toISOString().slice(0,10)
+    }, { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' }});
+    if(!opp.success) throw new Error(opp.errors?.join(', ') || 'Gagal membuat Opportunity');
+
+    return res.status(200).json({ success:true, opportunityId: opp.id, accountId: acc.id });
+  } catch (err) {
+    console.error('register-lead-convert ERR:', err);
+    return res.status(500).json({ success:false, message: err.message || 'Gagal memproses' });
+  }
+};

@@ -1,4 +1,3 @@
-// src/api/register-save-education.js
 const jsforce = require('jsforce');
 
 module.exports = async (req, res) => {
@@ -13,9 +12,9 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // Update Account: Master_School__c
+    // Update Account: Master_School__c atau fallback ke field teks jika ada
     const accUpd = { Id: accountId };
-    if (masterSchoolId) accUpd.Master_School__c = masterSchoolId; else accUpd.OtherSchool__c = schoolName; // opsi fallback jika kamu punya field teks
+    if (masterSchoolId) accUpd.Master_School__c = masterSchoolId; else accUpd.OtherSchool__c = schoolName;
     await conn.sobject('Account').update(accUpd);
 
     // Update Opportunity: Graduation_Year__c

@@ -1,35 +1,31 @@
-const jsforce = require('jsforce');
-const crypto = require('crypto');
+// src/api/register-finalize.js
+import jsforce from 'jsforce';
 
-module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
-  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
-  const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
+async function login() {
+  const conn = new jsforce.Connection({ loginUrl: process.env.SF_LOGIN_URL });
+  await conn.login(
+    process.env.SF_USERNAME,
+    process.env.SF_PASSWORD + process.env.SF_TOKEN
+  );
+  return conn;
+}
 
+export default async function handler(req, res) {
   try {
-    const { opportunityId, accountId } = req.body || {};
-    if (!opportunityId || !accountId) throw new Error('Param kurang');
+    if (req.method !== 'POST') return res.status(405).end();
+    const { opportunityId } = req.body || {};
+    if (!opportunityId) throw new Error('opportunityId is required');
 
-    await conn.login(SF_USERNAME, SF_PASSWORD);
+    const conn = await login();
 
-    await conn.sobject('Opportunity').update({ Id: opportunityId, StageName: 'Registration' });
+    // Contoh finalize: ubah stage booking / flag form purchased
+    await conn.sobject('Opportunity').update({
+      Id: opportunityId,
+      StageName: 'Booking Form',
+    });
 
-    const acc = await conn.sobject('Account').retrieve(accountId);
-    const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
-
-    const first=(acc.FirstName||'').toLowerCase();
-    const last=(acc.LastName||'').toLowerCase();
-    const username = `${first}${last}`.replace(/\s+/g,'');
-
-    const year = (opp.CreatedDate||'').slice(0,4) || String(new Date().getFullYear());
-    const passwordPlain = `m7u${first}${year}`;
-    const passwordHash = crypto.createHash('sha256').update(passwordPlain).digest('hex');
-
-    await conn.sobject('Account').update({ Id: accountId, Password__c: passwordHash });
-
-    res.status(200).json({ success:true, username, passwordPlain });
-  } catch (err) {
-    console.error('register-finalize ERR:', err);
-    res.status(500).json({ success:false, message: err.message || 'Finalize failed' });
+    res.json({ status: 'ok' });
+  } catch (e) {
+    res.status(400).json({ status: 'error', message: e.message || String(e) });
   }
-};
+}

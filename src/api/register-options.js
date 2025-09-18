@@ -1,6 +1,5 @@
-// src/api/register-options.js
 // Endpoint opsi wizard: campuses, intakes, programs (by campus)
-// Selalu mengembalikan { records: [...] } dan memberikan pesan error yang jelas.
+// Mengembalikan { records: [...] } — untuk intakes hanya { Id, Name }.
 
 const jsforce = require('jsforce');
 
@@ -15,19 +14,18 @@ module.exports = async (req, res) => {
 
   if (!type) return fail(400, 'type wajib diisi');
 
-  // Helper: fallback intakes (tahun ajaran dinamis)
-  function buildYearIntakes(rangeBack = 3, rangeForward = 1) {
+  // Fallback intakes (generate tahun ajaran → Name saja)
+  function buildYearIntakes(rangeBack = 5, rangeFwd = 1) {
     const now = new Date();
     const y = now.getFullYear();
-    const list = [];
-    for (let yr = y + rangeForward; yr >= y - rangeBack; yr--) {
+    const out = [];
+    for (let yr = y + rangeFwd; yr >= y - rangeBack; yr--) {
       const name = `${yr}/${yr + 1}`;
-      list.push({ Id: name, Name: name, Academic_Year__c: name });
+      out.push({ Id: name, Name: name });
     }
-    return list;
+    return out;
   }
 
-  // Login SF (hanya kalau perlu query SF)
   async function login() {
     if (!SF_LOGIN_URL || !SF_USERNAME || !SF_PASSWORD) {
       throw new Error('ENV Salesforce belum lengkap (SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD)');
@@ -38,7 +36,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // ================= CAMPUSES =================
+    // ============ CAMPUSES ============
     if (type === 'campuses' || type === 'campus') {
       const conn = await login();
       try {
@@ -52,12 +50,13 @@ module.exports = async (req, res) => {
         res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
         return ok({ records: q.records.map(r => ({ Id: r.Id, Name: r.Name })) });
       } catch (e) {
-        // Fallback: distinct Master_School__c dari Account
         const msg = String(e && e.message || e);
         const fallbackable = /INVALID_TYPE|sObject type .* is not supported|No such column/i.test(msg);
         if (!fallbackable) return fail(500, 'Gagal query campuses', { error: msg });
+
         try {
-          const q = await conn.query(`
+          const conn2 = await login();
+          const q = await conn2.query(`
             SELECT Master_School__c
             FROM Account
             WHERE Master_School__c != null
@@ -67,8 +66,7 @@ module.exports = async (req, res) => {
             LIMIT 200
           `);
           const rows = (q.records || []).map(r => ({
-            Id: r.Master_School__c,
-            Name: r.Master_School__c
+            Id: r.Master_School__c, Name: r.Master_School__c
           }));
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
           return ok({ records: rows, fallback: 'Account.Master_School__c' });
@@ -78,32 +76,28 @@ module.exports = async (req, res) => {
       }
     }
 
-    // ================= INTAKES =================
+    // ============ INTAKES (Name saja) ============
     if (type === 'intakes' || type === 'intake') {
       try {
         const conn = await login();
         const q = await conn.query(`
-          SELECT Id, Name, Academic_Year__c
+          SELECT Id, Name
           FROM Master_Intake__c
           WHERE Name LIKE '%${esc(term)}%'
           ORDER BY Name DESC
           LIMIT 200
         `);
         res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-        return ok({
-          records: q.records.map(r => ({
-            Id: r.Id, Name: r.Name, Academic_Year__c: r.Academic_Year__c
-          }))
-        });
+        return ok({ records: q.records.map(r => ({ Id: r.Id, Name: r.Name })) });
       } catch (e) {
-        // Jika object/field tidak ada → fallback dinamis (tahun ajaran)
+        // fallback dinamis → hanya Name
         const msg = String(e && e.message || e);
-        const fallback = buildYearIntakes(5, 1); // 6 tahun (Y+1 s.d. Y-5)
+        const fallback = buildYearIntakes(5, 1);
         return ok({ records: fallback, fallback: 'dynamic-years', error: msg });
       }
     }
 
-    // ================= PROGRAMS (by campus) =================
+    // ============ PROGRAMS (by campus) ============
     if (type === 'programs' || type === 'program') {
       if (!campusId) return fail(400, 'campusId wajib diisi');
       const conn = await login();
@@ -117,11 +111,9 @@ module.exports = async (req, res) => {
           LIMIT 200
         `);
         res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-        return ok({
-          records: q.records.map(r => ({
-            Id: r.Id, Name: r.Name, Campus__c: r.Campus__c
-          }))
-        });
+        return ok({ records: q.records.map(r => ({
+          Id: r.Id, Name: r.Name, Campus__c: r.Campus__c
+        })) });
       } catch (e) {
         return fail(500, 'Gagal query programs', { error: String(e && e.message || e) });
       }

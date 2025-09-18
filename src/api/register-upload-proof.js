@@ -2,7 +2,7 @@ const jsforce = require('jsforce');
 const multiparty = require('multiparty');
 
 const MAX_SIZE = 1024 * 1024;
-const ALLOWED = ['application/pdf','image/png','image/jpeg','image/jpg'];
+const ALLOWED = ['application/pdf','image/png','image/jpeg'];
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
@@ -32,7 +32,7 @@ module.exports = async (req, res) => {
     const ext = path.extname(file.originalFilename || '').replace('.','').toLowerCase() || 'pdf';
     const title = `BuktiBayar-${opportunityId}-${new Date().toISOString().slice(0,10)}`;
 
-    // File → Opportunity
+    // Upload & relate ke Opportunity + link ke Account
     const cv = await conn.sobject('ContentVersion').create({
       Title: title,
       PathOnClient: `${title}.${ext}`,
@@ -41,7 +41,6 @@ module.exports = async (req, res) => {
     });
     if (!cv.success) throw new Error(cv.errors?.join(', ') || 'Gagal upload bukti');
 
-    // Optional: link juga ke Account (biar muncul di Files Account)
     const q = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cv.id}' LIMIT 1`);
     const docId = q.records?.[0]?.ContentDocumentId;
     if (docId) {
@@ -52,12 +51,8 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Centang checkbox + set stage
-    await conn.sobject('Opportunity').update({
-      Id: opportunityId,
-      Is_Booking_Fee_Paid__c: true,
-      StageName: 'Form Payment'
-    });
+    // Set flag & Stage
+    await conn.sobject('Opportunity').update({ Id: opportunityId, Is_Booking_Fee_Paid__c: true, StageName: 'Form Payment' });
 
     return res.status(200).json({ success:true, contentVersionId: cv.id });
   } catch (err) {

@@ -1,6 +1,7 @@
 // src/api/webtolead.js
 const jsforce = require('jsforce');
 
+/** Utilities */
 function digits(s) { return String(s || '').replace(/\D/g, ''); }
 function normalizePhone(raw) {
   let p = digits(raw || '');
@@ -9,14 +10,16 @@ function normalizePhone(raw) {
   if (!p.startsWith('62')) p = '62' + p;
   return '+' + p;
 }
-function makeExternalId(email, phone) {
-  const e = String(email || '').trim().toLowerCase();
-  const d = digits(phone || '');
-  return `${e}|${d}`.slice(0, 255);
-}
 function sameSfId(a, b) {
   if (!a || !b) return false;
   return String(a).substring(0, 15).toUpperCase() === String(b).substring(0, 15).toUpperCase();
+}
+/** External ID: UNIQUE per campus */
+function makeExternalId(email, phone, campusId) {
+  const e = String(email || '').trim().toLowerCase();
+  const d = digits(phone || '');
+  const c = String(campusId || '').substring(0, 15).toUpperCase();
+  return `${e}|${d}|${c}`.slice(0, 255);
 }
 
 module.exports = async (req, res) => {
@@ -36,18 +39,19 @@ module.exports = async (req, res) => {
     const campusId    = (body.campusId || '').trim();
     const description = (body.description || '') || null;
 
+    // Basic validation
     if (!firstName) throw new Error('First name wajib diisi.');
     if (!email)     throw new Error('Email wajib diisi.');
     if (!phoneNorm) throw new Error('Phone wajib diisi.');
     if (!campusId)  throw new Error('Campus wajib dipilih.');
 
-    const externalId = makeExternalId(email, phoneNorm);
+    const externalId = makeExternalId(email, phoneNorm, campusId);
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
     // Cari lead existing (Email ATAU Phone) — lintas kampus
     const phoneDigits = digits(phoneNorm);
-    const patPlus62   = '+' + phoneDigits;               // +62xxxx
+    const patPlus62   = '+' + phoneDigits;                         // +62xxxx
     const patLocal    = phoneDigits.startsWith('62') ? phoneDigits.slice(2) : phoneDigits;
 
     const soql = `
@@ -66,7 +70,7 @@ module.exports = async (req, res) => {
     const sameCampus = recs.find(r => sameSfId(r.Campus__c, campusId));
     const anyMatch   = recs.length > 0;
 
-    // Header untuk mengizinkan save walau ada duplikat
+    // Header: izinkan save walau ada duplicate match
     const dupHeader = { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' } };
 
     async function updateLead(targetId) {
@@ -82,7 +86,6 @@ module.exports = async (req, res) => {
         External_ID__c: externalId,
         Campus__c: campusId
       };
-      // include header agar tidak diblokir duplicate rule pada update juga
       await conn.sobject('Lead').update(upd, dupHeader);
       return { action: 'updated', leadId: targetId };
     }
@@ -101,7 +104,6 @@ module.exports = async (req, res) => {
       };
       const result = await conn.sobject('Lead').create(ins, dupHeader);
       if (!result.success) {
-        // Jika tetap gagal (mis-config rule), lempar pesan asli
         throw new Error((result.errors && result.errors.join(', ')) || 'Gagal membuat Lead.');
       }
       return { action: 'created', leadId: result.id };
@@ -120,7 +122,7 @@ module.exports = async (req, res) => {
 
       outcome = needUpdate ? await updateLead(sameCampus.Id) : { action: 'skipped', leadId: sameCampus.Id };
     } else if (anyMatch) {
-      // Ada match identitas tapi kampus berbeda → buat record baru (pakai allowSave)
+      // Ada match identitas tapi kampus berbeda → buat record baru
       outcome = await createLead();
     } else {
       // Tidak ada match sama sekali → buat record baru

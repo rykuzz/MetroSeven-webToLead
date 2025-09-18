@@ -12,7 +12,11 @@ function normalizePhone(raw) {
 function makeExternalId(email, phone) {
   const e = String(email || '').trim().toLowerCase();
   const d = digits(phone || '');
-  return `${e}|${d}`.slice(0, 255); // jaga panjang
+  return `${e}|${d}`.slice(0, 255);
+}
+function sameSfId(a, b) {
+  if (!a || !b) return false;
+  return String(a).substring(0, 15).toUpperCase() === String(b).substring(0, 15).toUpperCase();
 }
 
 module.exports = async (req, res) => {
@@ -32,7 +36,6 @@ module.exports = async (req, res) => {
     const campusId    = (body.campusId || '').trim();
     const description = (body.description || '') || null;
 
-    // basic validations
     if (!firstName) throw new Error('First name wajib diisi.');
     if (!email)     throw new Error('Email wajib diisi.');
     if (!phoneNorm) throw new Error('Phone wajib diisi.');
@@ -42,14 +45,13 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // ---- Cari kandidat lead: email ATAU phone (tanpa batasan kampus)
-    // NB: Email di Salesforce case-insensitive untuk equality; phone kita cari dengan dua pola.
+    // Cari lead existing (Email ATAU Phone) — lintas kampus
     const phoneDigits = digits(phoneNorm);
-    const patPlus62   = '+' + phoneDigits;     // +62xxxx
+    const patPlus62   = '+' + phoneDigits;               // +62xxxx
     const patLocal    = phoneDigits.startsWith('62') ? phoneDigits.slice(2) : phoneDigits;
 
     const soql = `
-      SELECT Id, FirstName, LastName, Email, Phone, Campus__c
+      SELECT Id, FirstName, LastName, Email, Phone, Campus__c, Description
       FROM Lead
       WHERE (Email = '${email}'
         OR Phone LIKE '%${patPlus62}%'
@@ -59,13 +61,14 @@ module.exports = async (req, res) => {
       LIMIT 200
     `;
     const q = await conn.query(soql);
-    const records = q.records || [];
+    const recs = q.records || [];
 
-    // pecah: sama kampus vs kampus lain
-    const sameCampus = records.find(r => r.Campus__c === campusId);
-    const anyMatch   = records.length > 0;
+    const sameCampus = recs.find(r => sameSfId(r.Campus__c, campusId));
+    const anyMatch   = recs.length > 0;
 
-    // helper update fields if different
+    // Header untuk mengizinkan save walau ada duplikat
+    const dupHeader = { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' } };
+
     async function updateLead(targetId) {
       const upd = {
         Id: targetId,
@@ -75,11 +78,12 @@ module.exports = async (req, res) => {
         Phone: phoneNorm,
         Description: description,
         LeadSource: 'Web',
-        Status: 'New',              // sesuai request
-        External_ID__c: externalId, // auto-set
+        Status: 'New',
+        External_ID__c: externalId,
         Campus__c: campusId
       };
-      await conn.sobject('Lead').update(upd, { allowRecursive: true });
+      // include header agar tidak diblokir duplicate rule pada update juga
+      await conn.sobject('Lead').update(upd, dupHeader);
       return { action: 'updated', leadId: targetId };
     }
 
@@ -95,29 +99,31 @@ module.exports = async (req, res) => {
         External_ID__c: externalId,
         Campus__c: campusId
       };
-      const result = await conn.sobject('Lead').create(ins);
-      if (!result.success) throw new Error(result.errors?.join(', ') || 'Gagal membuat Lead.');
+      const result = await conn.sobject('Lead').create(ins, dupHeader);
+      if (!result.success) {
+        // Jika tetap gagal (mis-config rule), lempar pesan asli
+        throw new Error((result.errors && result.errors.join(', ')) || 'Gagal membuat Lead.');
+      }
       return { action: 'created', leadId: result.id };
     }
 
     let outcome;
     if (sameCampus) {
-      // Identitas sama + kampus sama → jangan buat baru; replace email/phone jika berubah (serta perbarui field lain).
+      // Kampus sama → update/replace jika ada perubahan
       const needUpdate =
         (sameCampus.Email || '').toLowerCase() !== email ||
         (digits(sameCampus.Phone) !== digits(phoneNorm)) ||
         (sameCampus.FirstName || '') !== firstName ||
         (sameCampus.LastName || '') !== (lastName || '') ||
-        (sameCampus.Campus__c || '') !== campusId ||
+        !sameSfId(sameCampus.Campus__c, campusId) ||
         (description && description !== (sameCampus.Description || ''));
 
-      if (needUpdate) outcome = await updateLead(sameCampus.Id);
-      else outcome = { action: 'skipped', leadId: sameCampus.Id };
+      outcome = needUpdate ? await updateLead(sameCampus.Id) : { action: 'skipped', leadId: sameCampus.Id };
     } else if (anyMatch) {
-      // Ada match identitas tapi kampus berbeda → buat Lead baru
+      // Ada match identitas tapi kampus berbeda → buat record baru (pakai allowSave)
       outcome = await createLead();
     } else {
-      // Tidak ada lead sama sekali → buat Lead baru
+      // Tidak ada match sama sekali → buat record baru
       outcome = await createLead();
     }
 

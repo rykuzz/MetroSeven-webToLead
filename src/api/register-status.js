@@ -1,4 +1,3 @@
-// fixed: remove Apex-style bind vars (:) from SOQL
 const jsforce = require('jsforce');
 const digits = (s) => String(s||'').replace(/\D/g,'');
 function escSOQL(v){ return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }

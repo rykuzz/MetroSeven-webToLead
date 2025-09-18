@@ -1,6 +1,3 @@
-import handler from './register';
-export default handler;
-
 const jsforce = require('jsforce');
 
 function digits(s){ return String(s||'').replace(/\D/g,''); }
@@ -71,4 +68,3 @@ module.exports = async (req, res) => {
     res.status(500).json({ success:false, message: err.message || 'Gagal memproses' });
   }
 };
-

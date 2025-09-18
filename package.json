@@ -1,13 +1,23 @@
 {
-  "name": "metroseven-webtolead",
+  "name": "metro-seven-university",
   "version": "1.0.0",
-  "private": true,
+  "description": "Landing page for Metro Seven University",
+  "main": "src/index.html",
   "scripts": {
-    "build": "echo \"static\"",
-    "start": "vercel dev"
+    "start": "live-server src",
+    "build": "echo 'Build process not defined yet.'"
   },
+  "keywords": [
+    "university",
+    "landing page",
+    "metro seven"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
   "dependencies": {
-    "jsforce": "^1.11.0",
-    "multiparty": "^4.2.3"
+    "jsforce": "^3.10.7"
+  },
+  "devDependencies": {
+    "live-server": "^1.2.1"
   }
 }

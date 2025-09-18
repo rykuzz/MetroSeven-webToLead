@@ -1,16 +1,16 @@
 // src/api/register-options.js
 // Wizard options: campuses, intakes (Name only), programs (by intakeId; optional campusId)
-// Aman untuk berbagai skema: mencoba beberapa pola, tidak melempar 500 ketika skema beda.
+// POST saveReg: simpan Campus__c, Intake__c, Study_Program__c ke Opportunity
+// Tidak ada handler masterBatch / bsp.
 
 const jsforce = require('jsforce');
+
+// escape sederhana untuk SOQL
 const esc = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
 module.exports = async (req, res) => {
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
-  const { method, query } = req;
-  if (method !== 'GET' && method !== 'POST') {
-    return res.status(405).json({ success: false, message: 'Method not allowed' });
-  }
+  const { method, query, body } = req;
 
   const send = (code, obj) => res.status(code).json(obj);
   const ok   = (data) => send(200, data);
@@ -26,12 +26,12 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // ---------- GET ----------
+    // =================== GET ===================
     if (method === 'GET') {
       const { type, term = '', campusId = '', intakeId = '' } = query || {};
       if (!type) return fail(400, 'type wajib diisi');
 
-      // CAMPUSES
+      // ---------- CAMPUSES ----------
       if (type === 'campuses' || type === 'campus') {
         const conn = await login();
         try {
@@ -45,12 +45,13 @@ module.exports = async (req, res) => {
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
           return ok({ success: true, records: r.records });
         } catch (e) {
-          // Fallback: distinct Account.Master_School__c jika Campus__c tidak ada
+          // Fallback: distinct Account.Master_School__c
           const msg = String(e && e.message || e);
           const fallbackable = /INVALID_TYPE|No such column|is not supported/i.test(msg);
           if (!fallbackable) return ok({ success: true, records: [], errors: [msg], source: 'campuses:err' });
 
-          const r2 = await conn.query(`
+          const conn2 = await login();
+          const r2 = await conn2.query(`
             SELECT Master_School__c
             FROM Account
             WHERE Master_School__c != null
@@ -64,7 +65,7 @@ module.exports = async (req, res) => {
         }
       }
 
-      // INTAKES (Name saja)
+      // ---------- INTAKES (Name only) ----------
       if (type === 'intakes' || type === 'intake') {
         const conn = await login();
         try {
@@ -76,9 +77,9 @@ module.exports = async (req, res) => {
             LIMIT 200
           `);
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-          return ok({ success: true, records: r.records });
+          return ok({ success: true, records: r.records.map(x => ({ Id: x.Id, Name: x.Name })) });
         } catch (e) {
-          // Fallback dinamis tahun ajaran (Name saja)
+          // Fallback dinamis tahun ajaran: hanya Name
           const now = new Date(); const y = now.getFullYear();
           const fallback = [];
           for (let yr = y + 1; yr >= y - 5; yr--) {
@@ -89,10 +90,9 @@ module.exports = async (req, res) => {
         }
       }
 
-      // PROGRAMS (utamakan by intakeId; campusId opsional)
+      // ---------- PROGRAMS (by intakeId; optional campusId) ----------
       if (type === 'programs' || type === 'program') {
         if (!intakeId) return fail(400, 'intakeId wajib diisi');
-
         const conn = await login();
         const errors = [];
         let rows = null;
@@ -108,9 +108,7 @@ module.exports = async (req, res) => {
             ORDER BY Study_Program__r.Name
             LIMIT 500
           `);
-          if (q1.totalSize > 0) {
-            rows = q1.records.map(r => ({ Id: r.Study_Program__c, Name: r.Study_Program__r?.Name }));
-          }
+          if (q1.totalSize > 0) rows = q1.records.map(r => ({ Id: r.Study_Program__c, Name: r.Study_Program__r?.Name }));
         } catch (e) { errors.push('SPI__c: ' + (e.message || String(e))); }
 
         // Try 2: Study_Program__c punya lookup Master_Intake__c
@@ -129,7 +127,7 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.Master_Intake__c: ' + (e.message || String(e))); }
         }
 
-        // Try 3: Study_Program__c punya lookup Intake__c (nama field alternatif)
+        // Try 3: Study_Program__c punya lookup Intake__c (nama alternatif)
         if (!rows || rows.length === 0) {
           try {
             const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
@@ -145,7 +143,7 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.Intake__c: ' + (e.message || String(e))); }
         }
 
-        // Try 4: Fallback — by Campus saja (kalau memang intake tdk mereferensi program di org ini)
+        // Try 4: Fallback — by Campus saja (kalau relasi intake tidak ada)
         if ((!rows || rows.length === 0) && campusId) {
           try {
             const q4 = await conn.query(`
@@ -159,17 +157,42 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.byCampus: ' + (e.message || String(e))); }
         }
 
-        return ok({ success: true, records: rows || [], source: rows && rows.length ? 'resolved' : 'not-found', errors: errors.length ? errors : undefined });
+        return ok({
+          success: true,
+          records: rows || [],
+          source: rows && rows.length ? 'resolved' : 'not-found',
+          errors: errors.length ? errors : undefined
+        });
       }
 
       return fail(400, 'Unknown GET type');
     }
 
-    // ---------- POST ----------
-    // (biarkan handler POST lama—saveReg, dll—kalau kamu masih memakainya)
-    return fail(400, 'Unknown POST action');
+    // =================== POST ===================
+    if (method === 'POST') {
+      const conn = await login();
+      if (body?.action === 'saveReg') {
+        const { opportunityId, campusId, intakeId, studyProgramId } = body || {};
+        if (!opportunityId || !campusId || !intakeId || !studyProgramId) {
+          return fail(400, 'Param kurang (opportunityId, campusId, intakeId, studyProgramId)');
+        }
+
+        // Update Opportunity dengan pilihan user
+        await conn.sobject('Opportunity').update({
+          Id: opportunityId,
+          Campus__c: campusId,
+          Intake__c: intakeId,
+          Study_Program__c: studyProgramId
+        });
+
+        return ok({ success: true });
+      }
+
+      return fail(400, 'Unknown POST action');
+    }
+
+    return fail(405, 'Method not allowed');
   } catch (err) {
-    // Hanya jatuh ke 500 untuk error yang benar2 fatal (ENV/login)
     return fail(500, err.message || 'Gagal memproses request');
   }
 };

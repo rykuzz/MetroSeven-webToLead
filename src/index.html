@@ -106,60 +106,76 @@
         </div>
     </section>
 
-    <section id="contact" class="contact">
-        <div class="container">
-             <div class="section-header">
-                <span class="section-tag">Hubungi Kami</span>
-                <h2 class="section-title">Punya Pertanyaan?</h2>
-                <p class="section-subtitle">Isi formulir di bawah ini dan tim admisi kami akan segera menghubungi Anda.</p>
-            </div>
+<!-- === CONTACT (REPLACE WHOLE SECTION) === -->
+<section id="contact" class="contact">
+  <div class="container">
+    <div class="section-header">
+      <span class="section-tag">Hubungi Kami</span>
+      <h2 class="section-title">Punya Pertanyaan?</h2>
+      <p class="section-subtitle">Isi formulir di bawah ini dan tim admisi kami akan segera menghubungi Anda.</p>
+    </div>
 
-            <div class="contact-layout">
-                <div class="contact-info">
-                    <h3>Informasi Kontak</h3>
-                    <p>Kami siap membantu menjawab semua pertanyaan Anda mengenai pendaftaran, program studi, dan kehidupan kampus.</p>
-                    <div class="info-item">
-                        <i class="fas fa-phone"></i>
-                        <div class="info-text"><h4>Telepon</h4><span>(021) 123-4567</span></div>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-envelope"></i>
-                        <div class="info-text"><h4>Email</h4><span>info@metroseven.ac.id</span></div>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-map-marker-alt"></i>
-                        <div class="info-text"><h4>Alamat</h4><span>Jl. Pendidikan No. 123, Jakarta Selatan</span></div>
-                    </div>
-                </div>
-                <div class="contact-form-wrapper">
-                    <form action="https://webto.salesforce.com/servlet/servlet.WebToLead?encoding=UTF-8&orgId=00DgL00000B1fqo" method="POST">
-                        <input type="hidden" name="oid" value="00DgL00000B1fqo">
-                        <input type="hidden" name="retURL" value="https://metro-seven-web-to-lead.vercel.app/thankyou.html">
-
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label for="first_name">Nama Depan</label>
-                                <input id="first_name" name="first_name" type="text" class="form-control" required/>
-                            </div>
-                            <div class="form-group">
-                                <label for="last_name">Nama Belakang</label>
-                                <input id="last_name" name="last_name" type="text" class="form-control" required/>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="email">Email</label>
-                            <input id="email" name="email" type="email" class="form-control" required/>
-                        </div>
-                        <div class="form-group">
-                            <label for="phone">Telepon</label>
-                            <input id="phone" name="phone" type="tel" class="form-control" required/>
-                        </div>
-                        <input type="submit" name="submit" class="btn btn-primary btn-full" value="Kirim Pesan">
-                    </form>
-                </div>
-            </div>
+    <div class="contact-layout">
+      <div class="contact-info">
+        <h3>Informasi Kontak</h3>
+        <p>Kami siap membantu menjawab semua pertanyaan Anda mengenai pendaftaran, program studi, dan kehidupan kampus.</p>
+        <div class="info-item">
+          <i class="fas fa-phone"></i>
+          <div class="info-text"><h4>Telepon</h4><span>(021) 123-4567</span></div>
         </div>
-    </section>
+        <div class="info-item">
+          <i class="fas fa-envelope"></i>
+          <div class="info-text"><h4>Email</h4><span>info@metroseven.ac.id</span></div>
+        </div>
+        <div class="info-item">
+          <i class="fas fa-map-marker-alt"></i>
+          <div class="info-text"><h4>Alamat</h4><span>Jl. Pendidikan No. 123, Jakarta Selatan</span></div>
+        </div>
+      </div>
+
+      <div class="contact-form-wrapper">
+        <form id="contactForm" novalidate>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="first_name">First name <span style="color:#e11d48">*</span></label>
+              <input id="first_name" name="first_name" type="text" class="form-control" required />
+            </div>
+            <div class="form-group">
+              <label for="last_name">Last name</label>
+              <input id="last_name" name="last_name" type="text" class="form-control" />
+            </div>
+            <div class="form-group">
+              <label for="email">Email <span style="color:#e11d48">*</span></label>
+              <input id="email" name="email" type="email" class="form-control" required />
+            </div>
+            <div class="form-group">
+              <label for="phone">Phone (Indonesia) <span style="color:#e11d48">*</span></label>
+              <input id="phone" name="phone" type="tel" class="form-control" placeholder="0812xxxxxxx" required />
+            </div>
+          </div>
+
+          <!-- CAMPUS (RADIO) -->
+          <div class="form-group">
+            <label>Campus <span style="color:#e11d48">*</span></label>
+            <div id="campusRadios" class="radio-list" aria-live="polite">
+              <div class="note">Memuat daftar campus…</div>
+            </div>
+            <div id="campusError" class="field-error" style="display:none"></div>
+          </div>
+
+          <!-- JURUSAN (opsional, masuk Description) -->
+          <div class="form-group">
+            <label for="major_interest">Jurusan yang diminati (opsional)</label>
+            <input id="major_interest" name="major_interest" type="text" class="form-control" placeholder="Contoh: Teknik Informatika" />
+          </div>
+
+          <input type="submit" class="btn btn-primary btn-full" value="Kirim Pesan" />
+          <div id="contactMsg" class="debug-info" style="display:none"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
 
     <footer class="footer">
         <div class="container footer-container">
@@ -176,5 +192,6 @@
 
     <script src="js/animations.js"></script>
     <script src="js/main.js"></script>
+    <script src="js/contact.js"></script>
 </body>
 </html>

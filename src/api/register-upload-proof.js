@@ -32,7 +32,6 @@ module.exports = async (req, res) => {
     const ext = path.extname(file.originalFilename || '').replace('.','').toLowerCase() || 'pdf';
     const title = `BuktiBayar-${opportunityId}-${new Date().toISOString().slice(0,10)}`;
 
-    // Upload & relate ke Opportunity + link ke Account
     const cv = await conn.sobject('ContentVersion').create({
       Title: title,
       PathOnClient: `${title}.${ext}`,
@@ -51,7 +50,6 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Set flag & Stage
     await conn.sobject('Opportunity').update({ Id: opportunityId, Is_Booking_Fee_Paid__c: true, StageName: 'Form Payment' });
 
     return res.status(200).json({ success:true, contentVersionId: cv.id });

@@ -12,7 +12,7 @@
     return '+' + p;
   };
 
-  // State helper (localStorage)
+  // ====== state (localStorage) ======
   const K = (k) => `m7_reg_${k}`;
   const S = {
     get opp() { return localStorage.getItem(K('opp')) || ''; },
@@ -28,6 +28,9 @@
 
     set sekolah(o){ localStorage.setItem(K('sekolah'), JSON.stringify(o||{})); },
     get sekolah(){ try{ return JSON.parse(localStorage.getItem(K('sekolah'))||'{}'); }catch(e){ return {}; } },
+
+    set payment(o){ localStorage.setItem(K('payment'), JSON.stringify(o||{})); },
+    get payment(){ try{ return JSON.parse(localStorage.getItem(K('payment'))||'{}'); }catch(e){ return {}; } },
   };
 
   function setStep(n) {
@@ -59,7 +62,7 @@
     return null;
   }
 
-  // ====== Step 1 ======
+  // ====== Step 1: Data Pemohon ======
   $('#formStep1').addEventListener('submit', async (e) => {
     e.preventDefault();
     const firstName = $('#firstName').value.trim();
@@ -70,9 +73,7 @@
     const msg = $('#msgStep1'); msg.style.display='none';
 
     if (!firstName || !lastName || !emailOk(email) || !phone) {
-      msg.textContent = 'Lengkapi data dengan benar.';
-      msg.style.display = 'block';
-      return;
+      msg.textContent = 'Lengkapi data dengan benar.'; msg.style.display = 'block'; return;
     }
 
     try {
@@ -105,7 +106,7 @@
     }
   });
 
-  // ====== Step 2 (bukti) ======
+  // ====== Step 2: Bukti Pembayaran ======
   $('#btnBack2').addEventListener('click', () => setStep(1));
   $('#formStep2').addEventListener('submit', async (e)=>{
     e.preventDefault();
@@ -130,13 +131,16 @@
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j.message || 'Upload gagal');
 
+      // simpan untuk ringkasan
+      S.payment = { proofName: file.name };
+
       closeLoading(); toastOk('Bukti pembayaran berhasil diupload.');
       setStep(3);
       loadStep3Options(); // preload
     } catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // ====== Step 3 (Registration: Campus → Intake → Program) ======
+  // ====== Step 3: Registration (Campus → Intake → Program) ======
   async function loadCampuses() {
     const wrap = $('#campusRadios'); wrap.innerHTML = '<div class="note">Memuat…</div>';
     try {
@@ -168,7 +172,6 @@
     recs.forEach(x => sel.innerHTML += `<option value="${x.StudyProgramId}">${x.StudyProgramName}</option>`);
   }
   async function resolveBSP(intakeId, studyProgramId){
-    // pick master batch by today, then resolve BSP
     const today = new Date().toISOString().slice(0,10);
     const mb = await fetch(`/api/register-options?type=masterBatch&intakeId=${encodeURIComponent(intakeId)}&date=${today}`).then(r=>r.json());
     if (!mb || !mb.id) throw new Error('Batch untuk intake ini belum tersedia.');
@@ -199,7 +202,7 @@
 
       const { bspId, bspName } = await resolveBSP(intakeId, programId);
 
-      // Simpan ke Opportunity: BSP + update name
+      // Simpan ke Opportunity: Campus__c, BSP & update Name (sesuai brief)
       const r = await fetch('/api/register-options', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
@@ -227,7 +230,7 @@
     if (campusId && intakeId) await loadPrograms(campusId, intakeId);
   });
 
-  // ====== Step 4 (School + Photo) ======
+  // ====== Step 4: Data Sekolah + Pas Foto ======
   function populateYears(){
     const sel = $('#gradYearSelect');
     const now = new Date().getFullYear();
@@ -240,7 +243,7 @@
   $('#formStep4').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const oppId = S.opp; const accId = S.acc;
-    const schoolId = $('#schoolId').value.trim(); // (asumsi akan diisi dari lookup/autocomplete di masa depan)
+    const schoolId = $('#schoolId').value.trim();
     const schoolName = $('#schoolInput').value.trim();
     const gradYear = $('#gradYearSelect').value;
     const photo = $('#photoFile').files[0];
@@ -253,6 +256,7 @@
 
     try{
       showLoading('Menyimpan data sekolah & pas foto…');
+
       // Save school & grad year
       const r1 = await fetch('/api/register-save-education', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -275,10 +279,10 @@
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // ====== Step 5 (Review & Submit) ======
+  // ====== Step 5: Review & Submit ======
   $('#btnBack5').addEventListener('click', () => setStep(4));
   function buildReview(){
-    const p = S.pemohon, r = S.reg, s = S.sekolah;
+    const p = S.pemohon, r = S.reg, s = S.sekolah, pay = S.payment;
     const box = $('#reviewBox');
     box.innerHTML = `
       <div class="review-section">
@@ -286,6 +290,10 @@
         <div><b>Nama:</b> ${p.firstName} ${p.lastName}</div>
         <div><b>Email:</b> ${p.email}</div>
         <div><b>Phone:</b> ${p.phone}</div>
+      </div>
+      <div class="review-section">
+        <h4>Pembayaran</h4>
+        <div><b>Bukti Bayar:</b> ${pay.proofName || '(terunggah)'}</div>
       </div>
       <div class="review-section">
         <h4>Registration</h4>
@@ -311,7 +319,6 @@
       const j = await r.json(); if(!r.ok || !j.success) throw new Error(j.message || 'Gagal menyelesaikan registrasi');
 
       closeLoading();
-      // Modal credential
       Swal.fire({
         icon:'success',
         title:'Registrasi Berhasil',
@@ -322,14 +329,16 @@
             <p>Password: <code>${j.passwordPlain}</code></p>
           </div>
         `,
-        confirmButtonText:'Selesai'
+        confirmButtonText:'Salin & Selesai',
+        didOpen: () => {
+          // tombol copy cepat
+        }
       }).then(()=> location.href='thankyou.html');
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // Init
+  // Init (kalau refresh, tampilkan id)
   document.addEventListener('DOMContentLoaded', () => {
-    // If coming back, show ids
     if (S.opp) { $('#opptyIdLabel').textContent = S.opp; }
     if (S.acc) { $('#accountIdLabel').textContent = S.acc; }
   });

@@ -1,4 +1,4 @@
-// src/api/register-options.js
+// api/register-options.js
 const jsforce = require('jsforce');
 
 module.exports = async (req, res) => {
@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
         const r = await conn.query(
           "SELECT Id, Name FROM Campus__c WHERE IsActive__c = true ORDER BY Name"
         );
-        return res.status(200).json({ success: true, records: r.records });
+        return res.status(200).json({ success:true, records: r.records });
       }
 
       if (type === 'intakes') {
@@ -28,117 +28,60 @@ module.exports = async (req, res) => {
           ORDER BY Start_Date__c DESC
         `;
         const r = await conn.query(soql, { campusId });
-        return res.status(200).json({ success: true, records: r.records });
+        return res.status(200).json({ success:true, records: r.records });
       }
 
       if (type === 'programs') {
-        const { campusId, intakeId } = query;
-
-        // Dapatkan Faculty_Campus__c
-        const fc = await conn.query(
-          "SELECT Id FROM Faculty_Campus__c WHERE Campus__c = :campusId LIMIT 100",
-          { campusId }
-        );
-        const fcIds = (fc.records || []).map((x) => x.Id);
-        if (!fcIds.length)
-          return res.status(200).json({ success: true, records: [] });
-
-        // Program yang tersedia untuk Campus & Intake
-        const soql = `
-          SELECT Id, Study_Program__r.Id, Study_Program__r.Name
-          FROM Study_Program_Faculty_Campus__c
-          WHERE Faculty_Campus__c IN :fcIds
-          AND   Id IN (
-            SELECT Study_Program_Faculty_Campus__c
-            FROM Study_Program_Intake__c
-            WHERE Master_Intake__c = :intakeId
-          )
-          ORDER BY Study_Program__r.Name
-        `;
-        const r = await conn.query(soql, { fcIds, intakeId });
-        const records = (r.records || []).map((x) => ({
-          Id: x.Id,
-          StudyProgramId: x.Study_Program__r.Id,
-          StudyProgramName: x.Study_Program__r.Name,
-        }));
-        return res.status(200).json({ success: true, records });
-      }
-
-      if (type === 'masterBatch') {
-        const { intakeId, date } = query;
-        const soql = `
-          SELECT Id, Name, Batch_Start_Date__c, Batch_End_Date__c
-          FROM Master_Batches__c
-          WHERE Intake__c = :intakeId
-          AND Batch_Start_Date__c <= :dateVal
-          AND Batch_End_Date__c >= :dateVal
-          ORDER BY Batch_Start_Date__c DESC
-          LIMIT 1
-        `;
-        const r = await conn.query(soql, { intakeId, dateVal: date });
-        const rec = r.records?.[0];
-        return res
-          .status(200)
-          .json({ success: true, id: rec?.Id || null, name: rec?.Name || null });
-      }
-
-      if (type === 'bsp') {
-        const { masterBatchId, studyProgramId } = query;
+        const { campusId } = query;
+        // Simple: program by campus (tanpa BSP)
         const soql = `
           SELECT Id, Name
-          FROM Batch_Study_Program__c
-          WHERE Master_Batch__c  = :masterBatchId
-          AND   Study_Program__c = :studyProgramId
-          LIMIT 1
+          FROM Study_Program__c
+          WHERE Campus__c = :campusId
+          ORDER BY Name
         `;
-        const r = await conn.query(soql, { masterBatchId, studyProgramId });
-        const rec = r.records?.[0];
-        return res
-          .status(200)
-          .json({ success: true, id: rec?.Id || null, name: rec?.Name || null });
+        const r = await conn.query(soql, { campusId });
+        return res.status(200).json({ success:true, records: r.records });
       }
 
-      return res.status(400).json({ success: false, message: 'Unknown GET type' });
+      return res.status(400).json({ success:false, message: 'Unknown GET type' });
     }
 
     if (method === 'POST') {
-      // Simpan pilihan registrasi ke Opportunity (+ perbarui nama)
+      // Simpan preferensi studi ke Opportunity (tanpa BSP) + rename Name
       if (body?.action === 'saveReg') {
-        const { opportunityId, campusId, intakeId, studyProgramId, bspId } = body;
-        if (!opportunityId || !campusId || !intakeId || !studyProgramId || !bspId) {
+        const { opportunityId, campusId, intakeId, studyProgramId, studyProgramName } = body;
+        if (!opportunityId || !campusId || !studyProgramId || !studyProgramName) {
           throw new Error('Param kurang');
         }
 
-        // Ambil BSP untuk nama
-        const bsp = await conn.sobject('Batch_Study_Program__c').retrieve(bspId);
-
-        // Update field di Opportunity:
-        // - Campus__c (sesuai brief)
-        // - Batch_Study_Program__c
-        await conn.sobject('Opportunity').update({
+        // Update field pada Opportunity
+        const upd = {
           Id: opportunityId,
           Campus__c: campusId,
-          Batch_Study_Program__c: bspId,
-        });
+          Study_Program__c: studyProgramId
+        };
+        if (typeof intakeId === 'string' && intakeId) {
+          upd.Master_Intake__c = intakeId;
+        }
+        await conn.sobject('Opportunity').update(upd);
 
-        // Susun ulang Opportunity.Name → "First Last/REG/{BSP}"
+        // Rename Opportunity jadi "First Last/REG/{Study Program Name}"
         const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
-        // Pola dasar dari brief: "{First} {Last}/REG"
-        const base = (opp.Name || '').split('/REG')[0]; // "First Last"
-        const newName = `${base}/REG/${bsp.Name}`;
+        const acc = await conn.sobject('Account').retrieve(opp.AccountId);
+        const base = `${(acc.FirstName||'').trim()} ${(acc.LastName||'').trim()}`.trim();
+        const newName = `${base}/REG/${studyProgramName}`;
         await conn.sobject('Opportunity').update({ Id: opportunityId, Name: newName });
 
-        return res.status(200).json({ success: true });
+        return res.status(200).json({ success:true });
       }
 
-      return res.status(400).json({ success: false, message: 'Unknown POST action' });
+      return res.status(400).json({ success:false, message: 'Unknown POST action' });
     }
 
-    return res.status(405).json({ success: false, message: 'Method not allowed' });
+    return res.status(405).json({ success:false, message:'Method not allowed' });
   } catch (err) {
     console.error('register-options ERR:', err);
-    return res
-      .status(500)
-      .json({ success: false, message: err.message || 'Error' });
+    return res.status(500).json({ success:false, message: err.message || 'Error' });
   }
 };

@@ -3,10 +3,23 @@ const jsforce = require('jsforce');
 const multiparty = require('multiparty');
 
 const MAX_SIZE = 1024 * 1024;
-const ALLOWED = ['image/png','image/jpeg'];
+const ALLOWED = ['image/png', 'image/jpeg'];
+
+function sanitizeName(s) {
+  return String(s || '')
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '-')   // karakter ilegal di filename
+    .replace(/\s+/g, ' ')
+    .slice(0, 80);
+}
+function yyyymmdd(d = new Date()) {
+  const z = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}`;
+}
 
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
+  if (req.method !== 'POST')
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
 
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
   const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
@@ -14,7 +27,7 @@ module.exports = async (req, res) => {
   try {
     const form = new multiparty.Form();
     const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => err ? reject(err) : resolve({ fields, files }));
+      form.parse(req, (err, fields, files) => (err ? reject(err) : resolve({ fields, files })));
     });
 
     const opportunityId = fields?.opportunityId?.[0];
@@ -28,32 +41,46 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    const fs = require('fs'); const path = require('path');
-    const buff = fs.readFileSync(file.path); const base64 = buff.toString('base64');
-    const ext = path.extname(file.originalFilename || '').replace('.','').toLowerCase() || 'jpg';
-    const title = `PasFoto-${accountId}-${new Date().toISOString().slice(0,10)}`;
+    // Ambil nama Account untuk pola nama file
+    const acc = await conn.sobject('Account').retrieve(accountId);
+    const accName = sanitizeName(acc?.Name || accountId);
+    const stamp = yyyymmdd();
+
+    const fs = require('fs');
+    const path = require('path');
+    const buff = fs.readFileSync(file.path);
+    const base64 = buff.toString('base64');
+
+    // Pertahankan ekstensi sumber (png/jpg), Title mengikuti pola
+    const ext = (path.extname(file.originalFilename || '.jpg') || '.jpg').replace('.', '').toLowerCase();
+    const title = `PasFoto-${accName}-${stamp}`;
 
     const cv = await conn.sobject('ContentVersion').create({
       Title: title,
       PathOnClient: `${title}.${ext}`,
       VersionData: base64,
-      FirstPublishLocationId: opportunityId
+      FirstPublishLocationId: opportunityId, // tampil di dokumen Opportunity
     });
     if (!cv.success) throw new Error(cv.errors?.join(', ') || 'Gagal upload pas foto');
 
-    const q = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cv.id}' LIMIT 1`);
+    // Kaitkan juga ke Account agar muncul di tab Documents Account
+    const q = await conn.query(
+      `SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cv.id}' LIMIT 1`
+    );
     const docId = q.records?.[0]?.ContentDocumentId;
     if (docId) {
       await conn.sobject('ContentDocumentLink').create({
         ContentDocumentId: docId,
         LinkedEntityId: accountId,
-        ShareType: 'V'
+        ShareType: 'V',
       });
     }
 
-    return res.status(200).json({ success:true, contentVersionId: cv.id });
+    return res.status(200).json({ success: true, contentVersionId: cv.id });
   } catch (err) {
     console.error('register-upload-photo ERR:', err);
-    return res.status(500).json({ success:false, message: err.message || 'Upload pas foto gagal' });
+    return res
+      .status(500)
+      .json({ success: false, message: err.message || 'Upload pas foto gagal' });
   }
 };

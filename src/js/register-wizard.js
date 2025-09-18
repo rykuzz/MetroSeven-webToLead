@@ -12,7 +12,6 @@
     return '+' + p;
   };
 
-  // ===== Local Storage State =====
   const K = (k) => `m7_reg_${k}`;
   const S = {
     get opp() { return localStorage.getItem(K('opp')) || ''; },
@@ -41,10 +40,10 @@
     updateProgress(n);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  const toastOk = (text) => Swal.fire({ icon: 'success', title: 'Berhasil', text, timer: 1600, showConfirmButton: false });
-  const showLoading = (title='Memproses…') => Swal.fire({ title, didOpen: () => Swal.showLoading(), allowOutsideClick: false, showConfirmButton: false });
+  const toastOk = (t) => Swal.fire({ icon: 'success', title: 'Berhasil', text: t, timer: 1600, showConfirmButton: false });
+  const showLoading = (t='Memproses…') => Swal.fire({ title: t, didOpen: () => Swal.showLoading(), allowOutsideClick: false, showConfirmButton: false });
   const closeLoading = () => Swal.close();
-  const showError = (msg) => Swal.fire({ icon:'error', title:'Gagal', text: msg||'Terjadi kesalahan' });
+  const showError = (m) => Swal.fire({ icon:'error', title:'Gagal', text: m||'Terjadi kesalahan' });
 
   async function pollStatus(email, phone) {
     for (let i = 0; i < 10; i++) {
@@ -56,7 +55,7 @@
     return null;
   }
 
-  // ===== Step 1: Data Pemohon =====
+  // STEP 1
   $('#formStep1').addEventListener('submit', async (e) => {
     e.preventDefault();
     const firstName = $('#firstName').value.trim();
@@ -72,7 +71,6 @@
     try {
       showLoading('Menyiapkan data Anda…');
 
-      // Jika ada Lead: set Is_Convert__c=true; jika tidak: buat PA + Opp (RT University, Stage Booking Form)
       const r = await fetch('/api/register-lead-convert', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ firstName, lastName, email, phone })
@@ -97,7 +95,7 @@
     } catch (err) { closeLoading(); showError(err.message); }
   });
 
-  // ===== Step 2: Bukti Pembayaran =====
+  // STEP 2
   $('#btnBack2').addEventListener('click', () => setStep(1));
   $('#formStep2').addEventListener('submit', async (e)=>{
     e.preventDefault();
@@ -126,7 +124,7 @@
     } catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // ===== Step 3: Preferensi Studi =====
+  // STEP 3
   async function loadCampuses() {
     const wrap = $('#campusRadios'); wrap.innerHTML = '<div class="note">Memuat…</div>';
     try {
@@ -184,7 +182,6 @@
       showLoading('Menyimpan pilihan program…');
       const { bspId, bspName } = await resolveBSP(intakeId, programId);
 
-      // Simpan BSP & update Name menjadi: "First Last/REG/{BSP.Name}"
       const r = await fetch('/api/register-options', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ action:'saveReg', opportunityId: S.opp, campusId, intakeId, studyProgramId: programId, bspId })
@@ -206,7 +203,7 @@
     if (campusId && intakeId) await loadPrograms(campusId, intakeId);
   });
 
-  // ===== Step 4: Sekolah + Pas Foto =====
+  // STEP 4
   function populateYears(){
     const sel = $('#gradYearSelect');
     const now = new Date().getFullYear();
@@ -230,14 +227,12 @@
 
     try{
       showLoading('Menyimpan data sekolah & pas foto…');
-      // Simpan sekolah + tahun lulus
       const r1 = await fetch('/api/register-save-education', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ opportunityId: oppId, accountId: accId, masterSchoolId: schoolId||null, schoolName, graduationYear: gradYear })
       });
       const j1 = await r1.json(); if(!r1.ok || !j1.success) throw new Error(j1.message || 'Gagal menyimpan data sekolah');
 
-      // Upload pas foto → ke Opportunity & relate ke Account
       const form = new FormData();
       form.append('file', photo);
       form.append('opportunityId', oppId);
@@ -251,7 +246,7 @@
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // ===== Step 5: Review & Submit =====
+  // STEP 5
   $('#btnBack5').addEventListener('click', () => setStep(4));
   function buildReview(){
     const p = S.pemohon, r = S.reg, s = S.sekolah;
@@ -272,7 +267,7 @@
         <div><b>Tahun Lulus:</b> ${s.gradYear}</div>
         <div><b>Pas Foto:</b> ${s.photoName}</div>
       </div>
-      <div class="hint">Saat Submit: Stage Opportunity akan menjadi <b>Registration</b> dan credentials ditampilkan sekali.</div>
+      <div class="hint">Saat Submit: Stage Opportunity → <b>Registration</b> & credentials ditampilkan sekali.</div>
     `;
   }
   $('#btnSubmitFinal').addEventListener('click', async ()=>{
@@ -300,9 +295,7 @@
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // Init
   document.addEventListener('DOMContentLoaded', () => {
-    // Isi info VA contoh (opsional)
     const VA = { bank: 'BCA', number: '8888800123456789' };
     $('#vaBank') && ($('#vaBank').textContent = VA.bank);
     $('#vaNumber') && ($('#vaNumber').textContent = VA.number);

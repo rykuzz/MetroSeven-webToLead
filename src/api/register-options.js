@@ -1,7 +1,6 @@
 // src/api/register-options.js
 // Wizard options: campuses, intakes (Name only), programs (by intakeId; optional campusId)
-// POST saveReg: simpan Campus__c, Intake__c, Study_Program__c ke Opportunity
-// Tidak ada handler masterBatch / bsp.
+// POST saveReg: simpan Campus__c, Master_Intake__c, Study_Program__c ke Opportunity
 
 const jsforce = require('jsforce');
 
@@ -97,7 +96,7 @@ module.exports = async (req, res) => {
         const errors = [];
         let rows = null;
 
-        // Try 1: Junction Study_Program_Intake__c (relasi: Master_Intake__c → Study_Program__c)
+        // Try 1: Junction Study_Program_Intake__c
         try {
           const campusFilter = campusId ? `AND (Study_Program__r.Campus__c = '${esc(campusId)}')` : '';
           const q1 = await conn.query(`
@@ -111,7 +110,7 @@ module.exports = async (req, res) => {
           if (q1.totalSize > 0) rows = q1.records.map(r => ({ Id: r.Study_Program__c, Name: r.Study_Program__r?.Name }));
         } catch (e) { errors.push('SPI__c: ' + (e.message || String(e))); }
 
-        // Try 2: Study_Program__c punya lookup Master_Intake__c
+        // Try 2: Study_Program__c dengan lookup Master_Intake__c
         if (!rows || rows.length === 0) {
           try {
             const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
@@ -127,7 +126,7 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.Master_Intake__c: ' + (e.message || String(e))); }
         }
 
-        // Try 3: Study_Program__c punya lookup Intake__c (nama alternatif)
+        // Try 3: alternatif Intake__c
         if (!rows || rows.length === 0) {
           try {
             const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
@@ -143,7 +142,7 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.Intake__c: ' + (e.message || String(e))); }
         }
 
-        // Try 4: Fallback — by Campus saja (kalau relasi intake tidak ada)
+        // Try 4: fallback by campus
         if ((!rows || rows.length === 0) && campusId) {
           try {
             const q4 = await conn.query(`
@@ -171,17 +170,18 @@ module.exports = async (req, res) => {
     // =================== POST ===================
     if (method === 'POST') {
       const conn = await login();
+
       if (body?.action === 'saveReg') {
         const { opportunityId, campusId, intakeId, studyProgramId } = body || {};
         if (!opportunityId || !campusId || !intakeId || !studyProgramId) {
           return fail(400, 'Param kurang (opportunityId, campusId, intakeId, studyProgramId)');
         }
 
-        // Update Opportunity dengan pilihan user
+        // ⬇️ Perbaikan: gunakan Master_Intake__c (bukan Intake__c)
         await conn.sobject('Opportunity').update({
           Id: opportunityId,
           Campus__c: campusId,
-          Intake__c: intakeId,
+          Master_Intake__c: intakeId,
           Study_Program__c: studyProgramId
         });
 

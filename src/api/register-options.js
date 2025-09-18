@@ -1,4 +1,3 @@
-// api/register-options.js
 const jsforce = require('jsforce');
 
 module.exports = async (req, res) => {
@@ -13,9 +12,7 @@ module.exports = async (req, res) => {
       const { type } = query;
 
       if (type === 'campuses') {
-        const r = await conn.query(
-          "SELECT Id, Name FROM Campus__c WHERE IsActive__c = true ORDER BY Name"
-        );
+        const r = await conn.query("SELECT Id, Name FROM Campus__c WHERE IsActive__c = true ORDER BY Name");
         return res.status(200).json({ success:true, records: r.records });
       }
 
@@ -33,7 +30,6 @@ module.exports = async (req, res) => {
 
       if (type === 'programs') {
         const { campusId } = query;
-        // Simple: program by campus (tanpa BSP)
         const soql = `
           SELECT Id, Name
           FROM Study_Program__c
@@ -48,30 +44,22 @@ module.exports = async (req, res) => {
     }
 
     if (method === 'POST') {
-      // Simpan preferensi studi ke Opportunity (tanpa BSP) + rename Name
       if (body?.action === 'saveReg') {
         const { opportunityId, campusId, intakeId, studyProgramId, studyProgramName } = body;
         if (!opportunityId || !campusId || !studyProgramId || !studyProgramName) {
           throw new Error('Param kurang');
         }
 
-        // Update field pada Opportunity
-        const upd = {
-          Id: opportunityId,
-          Campus__c: campusId,
-          Study_Program__c: studyProgramId
-        };
-        if (typeof intakeId === 'string' && intakeId) {
-          upd.Master_Intake__c = intakeId;
-        }
+        // Update field di Opportunity
+        const upd = { Id: opportunityId, Campus__c: campusId, Study_Program__c: studyProgramId };
+        if (typeof intakeId === 'string' && intakeId) upd.Master_Intake__c = intakeId;
         await conn.sobject('Opportunity').update(upd);
 
-        // Rename Opportunity jadi "First Last/REG/{Study Program Name}"
+        // Rename → "First Last/REG/{Study Program}"
         const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
         const acc = await conn.sobject('Account').retrieve(opp.AccountId);
         const base = `${(acc.FirstName||'').trim()} ${(acc.LastName||'').trim()}`.trim();
-        const newName = `${base}/REG/${studyProgramName}`;
-        await conn.sobject('Opportunity').update({ Id: opportunityId, Name: newName });
+        await conn.sobject('Opportunity').update({ Id: opportunityId, Name: `${base}/REG/${studyProgramName}` });
 
         return res.status(200).json({ success:true });
       }

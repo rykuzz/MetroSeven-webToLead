@@ -1,11 +1,7 @@
-// fixed: remove Apex-style bind vars (:) from SOQL + correct name update
 const jsforce = require('jsforce');
 
 function escSOQL(v){ return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
-function inList(ids){
-  if(!ids || !ids.length) return "()";
-  return "(" + ids.map(id => "'" + escSOQL(id) + "'").join(",") + ")";
-}
+function inList(ids){ return "(" + ids.map(id => "'" + escSOQL(id) + "'").join(",") + ")"; }
 
 module.exports = async (req, res) => {
   const { method, query, body } = req;
@@ -26,10 +22,8 @@ module.exports = async (req, res) => {
       if (type === 'intakes') {
         const { campusId } = query;
         const soql =
-          "SELECT Id, Name, Start_Date__c, End_Date__c " +
-          "FROM Master_Intake__c " +
-          "WHERE Campus__c = '" + escSOQL(campusId) + "' " +
-          "ORDER BY Start_Date__c DESC";
+          "SELECT Id, Name, Start_Date__c, End_Date__c FROM Master_Intake__c " +
+          "WHERE Campus__c = '" + escSOQL(campusId) + "' ORDER BY Start_Date__c DESC";
         const r = await conn.query(soql);
         return res.status(200).json({ success:true, records: r.records });
       }
@@ -41,15 +35,10 @@ module.exports = async (req, res) => {
         if (!fcIds.length) return res.status(200).json({ success:true, records: [] });
 
         const soql =
-          "SELECT Id, Study_Program__r.Id, Study_Program__r.Name " +
-          "FROM Study_Program_Faculty_Campus__c " +
+          "SELECT Id, Study_Program__r.Id, Study_Program__r.Name FROM Study_Program_Faculty_Campus__c " +
           "WHERE Faculty_Campus__c IN " + inList(fcIds) + " " +
-          "AND   Id IN ( " +
-          "  SELECT Study_Program_Faculty_Campus__c " +
-          "  FROM Study_Program_Intake__c " +
-          "  WHERE Master_Intake__c = '" + escSOQL(intakeId) + "'" +
-          ") " +
-          "ORDER BY Study_Program__r.Name";
+          "AND Id IN (SELECT Study_Program_Faculty_Campus__c FROM Study_Program_Intake__c WHERE Master_Intake__c = '" + escSOQL(intakeId) + "')" +
+          " ORDER BY Study_Program__r.Name";
         const r = await conn.query(soql);
         const records = (r.records||[]).map(x=>({
           Id: x.Id,
@@ -62,8 +51,7 @@ module.exports = async (req, res) => {
       if (type === 'masterBatch') {
         const { intakeId, date } = query;
         const soql =
-          "SELECT Id, Name, Batch_Start_Date__c, Batch_End_Date__c " +
-          "FROM Master_Batches__c " +
+          "SELECT Id, Name, Batch_Start_Date__c, Batch_End_Date__c FROM Master_Batches__c " +
           "WHERE Intake__c = '" + escSOQL(intakeId) + "' " +
           "AND Batch_Start_Date__c <= " + escSOQL(date) + " " +
           "AND Batch_End_Date__c >= " + escSOQL(date) + " " +
@@ -76,11 +64,9 @@ module.exports = async (req, res) => {
       if (type === 'bsp') {
         const { masterBatchId, studyProgramId } = query;
         const soql =
-          "SELECT Id, Name " +
-          "FROM Batch_Study_Program__c " +
-          "WHERE Master_Batch__c  = '" + escSOQL(masterBatchId) + "' " +
-          "AND   Study_Program__c = '" + escSOQL(studyProgramId) + "' " +
-          "LIMIT 1";
+          "SELECT Id, Name FROM Batch_Study_Program__c " +
+          "WHERE Master_Batch__c = '" + escSOQL(masterBatchId) + "' " +
+          "AND Study_Program__c = '" + escSOQL(studyProgramId) + "' LIMIT 1";
         const r = await conn.query(soql);
         const rec = r.records?.[0];
         return res.status(200).json({ success:true, id: rec?.Id || null, name: rec?.Name || null });

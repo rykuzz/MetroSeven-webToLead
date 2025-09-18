@@ -5,12 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Registrasi — Wizard 5 Langkah</title>
 
-  <!-- Styles -->
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/responsive.css">
   <link rel="stylesheet" href="css/register-style.css">
 
-  <!-- SweetAlert2 (untuk loading/toast/modal credentials) -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
@@ -22,7 +20,6 @@
       <p>Lengkapi kelima langkah di bawah ini.</p>
     </div>
 
-    <!-- Stepper -->
     <ul class="progress-steps" id="progressSteps">
       <li class="step-item is-active" data-step="1"><span class="step-index">1</span><span class="step-label">Data Pemohon</span></li>
       <li class="step-item" data-step="2"><span class="step-index">2</span><span class="step-label">Bukti Pembayaran</span></li>
@@ -31,7 +28,7 @@
       <li class="step-item" data-step="5"><span class="step-index">5</span><span class="step-label">Review & Submit</span></li>
     </ul>
 
-    <!-- STEP 1: Data Pemohon -->
+    <!-- STEP 1 -->
     <section id="step1" class="form-step" data-step="1">
       <form id="formStep1">
         <div class="form-grid">
@@ -56,12 +53,10 @@
           </div>
         </div>
 
-        <div class="note">Setelah submit, sistem akan: cek Lead (email & phone). Jika ada → tandai <code>Is_Convert__c=true</code> (Apex auto-convert). Jika tidak ada → buat Person Account + Opportunity (RT University, Stage <i>Booking Form</i>). ID akan otomatis tersimpan untuk langkah berikut.</div>
+        <div class="note">Sistem: cek Lead (email & phone). Ada → set <code>Is_Convert__c=true</code> (Apex auto-convert). Tidak ada → buat Person Account + Opportunity (RT University, Stage Booking Form).</div>
 
         <div id="msgStep1" class="field-error" style="display:none"></div>
-        <div class="actions">
-          <button type="submit" class="submit-btn">Lanjut</button>
-        </div>
+        <div class="actions"><button type="submit" class="submit-btn">Lanjut</button></div>
 
         <div class="debug-info">
           Opportunity: <span id="opptyIdLabel">-</span><br/>
@@ -70,12 +65,12 @@
       </form>
     </section>
 
-    <!-- STEP 2: Bukti Pembayaran -->
+    <!-- STEP 2 -->
     <section id="step2" class="form-step" data-step="2" style="display:none">
       <form id="formStep2">
         <div class="va-card">
           <div class="va-title">Virtual Account Pembayaran</div>
-          <div class="va-sub">Gunakan informasi berikut untuk pembayaran form</div>
+          <div class="va-sub">Gunakan info berikut untuk pembayaran form</div>
           <div class="va-row"><div class="label">Bank</div><div id="vaBank" class="value">-</div><button type="button" class="copy-btn" data-copy="#vaBank">Salin</button></div>
           <div class="va-row"><div class="label">VA Number</div><div id="vaNumber" class="value code">-</div><button type="button" class="copy-btn" data-copy="#vaNumber">Salin</button></div>
         </div>
@@ -93,7 +88,7 @@
       </form>
     </section>
 
-    <!-- STEP 3: Preferensi Studi -->
+    <!-- STEP 3 -->
     <section id="step3" class="form-step" data-step="3" style="display:none">
       <form id="formStep3">
         <div class="form-group full-width">
@@ -103,18 +98,13 @@
         <div class="form-grid">
           <div class="form-group">
             <label>Tahun Ajaran (Intake) <span class="required-star">*</span></label>
-            <select id="intakeSelect" class="form-control">
-              <option value="">Pilih tahun ajaran</option>
-            </select>
+            <select id="intakeSelect" class="form-control"><option value="">Pilih tahun ajaran</option></select>
           </div>
           <div class="form-group">
             <label>Study Program <span class="required-star">*</span></label>
-            <select id="programSelect" class="form-control">
-              <option value="">Pilih program</option>
-            </select>
+            <select id="programSelect" class="form-control"><option value="">Pilih program</option></select>
           </div>
         </div>
-
         <div id="msgStep3" class="field-error" style="display:none"></div>
         <div class="actions">
           <button id="btnBack3" type="button" class="btn">Kembali</button>
@@ -123,7 +113,7 @@
       </form>
     </section>
 
-    <!-- STEP 4: Data Sekolah + Pas Foto -->
+    <!-- STEP 4 -->
     <section id="step4" class="form-step" data-step="4" style="display:none">
       <form id="formStep4">
         <div class="form-group full-width">
@@ -131,7 +121,6 @@
           <input id="schoolInput" class="form-control" type="text" placeholder="Ketik nama sekolah">
           <input id="schoolId" type="hidden" value="">
         </div>
-
         <div class="form-grid">
           <div class="form-group">
             <label>Tahun Lulus <span class="required-star">*</span></label>
@@ -151,7 +140,7 @@
       </form>
     </section>
 
-    <!-- STEP 5: Review & Submit -->
+    <!-- STEP 5 -->
     <section id="step5" class="form-step" data-step="5" style="display:none">
       <div class="summary-card" id="reviewBox"></div>
       <div class="actions">
@@ -161,7 +150,6 @@
     </section>
   </main>
 
-  <!-- Scripts -->
   <script src="js/register-wizard.js"></script>
 </body>
 </html>

@@ -29,37 +29,85 @@ module.exports = async (req, res) => {
       }
 
       if (type === 'programs') {
-        const { campusId } = query;
+        const { campusId, intakeId } = query;
+        // Dapatkan Faculty_Campus__c
+        const fc = await conn.query("SELECT Id FROM Faculty_Campus__c WHERE Campus__c = :campusId LIMIT 100", { campusId });
+        const fcIds = (fc.records||[]).map(x=>x.Id);
+        if (!fcIds.length) return res.status(200).json({ success:true, records: [] });
+
+        const soql = `
+          SELECT Id, Study_Program__r.Id, Study_Program__r.Name
+          FROM Study_Program_Faculty_Campus__c
+          WHERE Faculty_Campus__c IN :fcIds
+          AND   Id IN (
+            SELECT Study_Program_Faculty_Campus__c
+            FROM Study_Program_Intake__c
+            WHERE Master_Intake__c = :intakeId
+          )
+          ORDER BY Study_Program__r.Name
+        `;
+        const r = await conn.query(soql, { fcIds, intakeId });
+        const records = (r.records||[]).map(x=>({
+          Id: x.Id,
+          StudyProgramId: x.Study_Program__r.Id,
+          StudyProgramName: x.Study_Program__r.Name
+        }));
+        return res.status(200).json({ success:true, records });
+      }
+
+      if (type === 'masterBatch') {
+        const { intakeId, date } = query;
+        const soql = `
+          SELECT Id, Name, Batch_Start_Date__c, Batch_End_Date__c
+          FROM Master_Batches__c
+          WHERE Intake__c = :intakeId
+          AND Batch_Start_Date__c <= :dateVal
+          AND Batch_End_Date__c >= :dateVal
+          ORDER BY Batch_Start_Date__c DESC
+          LIMIT 1
+        `;
+        const r = await conn.query(soql, { intakeId, dateVal: date });
+        const rec = r.records?.[0];
+        return res.status(200).json({ success:true, id: rec?.Id || null, name: rec?.Name || null });
+      }
+
+      if (type === 'bsp') {
+        const { masterBatchId, studyProgramId } = query;
         const soql = `
           SELECT Id, Name
-          FROM Study_Program__c
-          WHERE Campus__c = :campusId
-          ORDER BY Name
+          FROM Batch_Study_Program__c
+          WHERE Master_Batch__c  = :masterBatchId
+          AND   Study_Program__c = :studyProgramId
+          LIMIT 1
         `;
-        const r = await conn.query(soql, { campusId });
-        return res.status(200).json({ success:true, records: r.records });
+        const r = await conn.query(soql, { masterBatchId, studyProgramId });
+        const rec = r.records?.[0];
+        return res.status(200).json({ success:true, id: rec?.Id || null, name: rec?.Name || null });
       }
 
       return res.status(400).json({ success:false, message: 'Unknown GET type' });
     }
 
     if (method === 'POST') {
+      // Simpan BSP ke Opportunity + update Name → "First Last/REG/{BSP.Name}"
       if (body?.action === 'saveReg') {
-        const { opportunityId, campusId, intakeId, studyProgramId, studyProgramName } = body;
-        if (!opportunityId || !campusId || !studyProgramId || !studyProgramName) {
-          throw new Error('Param kurang');
-        }
+        const { opportunityId, bspId } = body;
+        if (!opportunityId || !bspId) throw new Error('Param kurang');
 
-        // Update field di Opportunity
-        const upd = { Id: opportunityId, Campus__c: campusId, Study_Program__c: studyProgramId };
-        if (typeof intakeId === 'string' && intakeId) upd.Master_Intake__c = intakeId;
-        await conn.sobject('Opportunity').update(upd);
+        const [bsp, opp] = await Promise.all([
+          conn.sobject('Batch_Study_Program__c').retrieve(bspId),
+          conn.sobject('Opportunity').retrieve(opportunityId),
+        ]);
 
-        // Rename → "First Last/REG/{Study Program}"
-        const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
-        const acc = await conn.sobject('Account').retrieve(opp.AccountId);
-        const base = `${(acc.FirstName||'').trim()} ${(acc.LastName||'').trim()}`.trim();
-        await conn.sobject('Opportunity').update({ Id: opportunityId, Name: `${base}/REG/${studyProgramName}` });
+        // Base name adalah "First Last/REG"
+        const baseName = (opp.Name || '').split('/REG')[0] + '/REG';
+        const newName = `${baseName}/${bsp.Name}`;
+
+        await conn.sobject('Opportunity').update({
+          Id: opportunityId,
+          Batch_Study_Program__c: bspId,
+          Name: newName
+        });
 
         return res.status(200).json({ success:true });
       }

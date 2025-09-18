@@ -21,7 +21,7 @@ function goToStep(n){
 }
 window.goToStep = goToStep;
 
-// ========= VA (hardcode info) =========
+// ========= VA (untuk Step 2) =========
 const VA_INFO = { bank: 'BCA', number: '8888800123456789', name: 'Metro Seven Admission' };
 document.addEventListener('DOMContentLoaded', () => {
   $('#vaBank')   && ($('#vaBank').textContent   = VA_INFO.bank);
@@ -40,19 +40,30 @@ document.addEventListener('click', async (e) => {
   } catch { alert('Gagal menyalin.'); }
 });
 
-// ========= STEP 1: Bukti Pembayaran =========
+// ========= STEP 1: Data Pemohon =========
+$('#nextBtn1')?.addEventListener('click', () => {
+  const firstName = $('#firstName')?.value.trim();
+  const email = $('#email')?.value.trim();
+  const phone = $('#phone')?.value.trim();
+  if (!firstName) return alert('Nama depan wajib.');
+  if (!emailOk(email)) return alert('Format email tidak valid.');
+  if (!phone) return alert('No. HP wajib.');
+  goToStep(2);
+});
+
+// ========= STEP 2: Bukti Pembayaran =========
 const MAX_PROOF = 5 * 1024 * 1024;
 const ALLOWED_PROOF = ['image/jpeg','image/png','application/pdf'];
 let paymentProofDataURL = null, paymentProofFileName = null;
 
 const proofInput = $('#paymentProof'), proofErr = $('#paymentProofError');
 const proofPrev  = $('#paymentProofPreview'), proofImg = $('#paymentProofImg'), proofMeta = $('#paymentProofMeta');
-const nextBtn1   = $('#nextBtn1');
+const nextBtn2   = $('#nextBtn2');
 
 if (proofInput) {
   proofInput.addEventListener('change', async (e) => {
     proofErr.textContent = ''; proofPrev.style.display = 'none';
-    paymentProofDataURL = null; paymentProofFileName = null; nextBtn1.disabled = true;
+    paymentProofDataURL = null; paymentProofFileName = null; nextBtn2.disabled = true;
 
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -71,25 +82,14 @@ if (proofInput) {
     };
     fr.readAsDataURL(file);
 
-    nextBtn1.disabled = false;
+    nextBtn2.disabled = false;
     window.paymentProofDataURL = paymentProofDataURL;
     window.paymentProofFileName = paymentProofFileName;
   });
 
-  nextBtn1?.addEventListener('click', () => goToStep(2));
+  $('#prevBtn2')?.addEventListener('click', () => goToStep(1));
+  nextBtn2?.addEventListener('click', () => goToStep(3));
 }
-
-// ========= STEP 2: Data Pemohon =========
-$('#prevBtn2')?.addEventListener('click', () => goToStep(1));
-$('#nextBtn2')?.addEventListener('click', () => {
-  const firstName = $('#firstName')?.value.trim();
-  const email = $('#email')?.value.trim();
-  const phone = $('#phone')?.value.trim();
-  if (!firstName) return alert('Nama depan wajib.');
-  if (!emailOk(email)) return alert('Format email tidak valid.');
-  if (!phone) return alert('No. HP wajib.');
-  goToStep(3);
-});
 
 // ========= Helpers umum =========
 function setSelectOptions(selectEl, items, placeholder = '— Pilih —') {
@@ -139,10 +139,7 @@ async function loadCampuses() {
       $('#campusId').value = checked.value;
       $('#campusName').value = checked.closest('label').querySelector('.radio-title').textContent;
 
-      // optional: tetap tampilkan Tahun Ajaran
       await loadIntakes(checked.value);
-
-      // langsung muat Study Program by Campus
       await loadPrograms(checked.value);
     }
 
@@ -152,14 +149,13 @@ async function loadCampuses() {
         $('#campusId').value = campusId;
         $('#campusName').value = e.target.closest('label').querySelector('.radio-title').textContent;
 
-        // reset dropdown
         setSelectOptions($('#intakeSelect'), [], '— Memuat Tahun Ajaran… —');
         $('#intakeSelect').disabled = true;
         setSelectOptions($('#studyProgramSelect'), [], '— Memuat Study Program… —');
         $('#studyProgramSelect').disabled = true;
 
-        await loadIntakes(campusId);     // optional
-        await loadPrograms(campusId);    // wajib
+        await loadIntakes(campusId);
+        await loadPrograms(campusId);
       }
     });
 
@@ -185,7 +181,7 @@ async function loadIntakes(campusId) {
   }
 }
 
-// ❗ hanya by campus
+// by campus only
 async function loadPrograms(campusId) {
   const sel = $('#studyProgramSelect');
   if (!campusId) {
@@ -213,7 +209,7 @@ async function loadPrograms(campusId) {
   }
 }
 
-// Tahun lulus: 2025 ke atas (s/d current + 5)
+// Tahun lulus: 2025 s/d current + 5
 function populateGradYear() {
   const sel = $('#gradYear'); if (!sel) return;
   const current = new Date().getFullYear();
@@ -240,7 +236,7 @@ $('#nextBtn3')?.addEventListener('click', () => {
   goToStep(4);
 });
 
-// ========= STEP 4: Sekolah (autocomplete) =========
+// ========= STEP 4: Sekolah + Pas Foto =========
 const toggleSchoolManual = $('#schoolManualToggle');
 const otherSchoolBox = $('#otherSchoolContainer');
 toggleSchoolManual?.addEventListener('change', e => { otherSchoolBox.style.display = e.target.checked ? 'block' : 'none'; });
@@ -266,7 +262,7 @@ schoolSearch?.addEventListener('input', () => {
         li.innerHTML = `${it.Name} ${it.NPSN__c ? `<span class="muted">• NPSN ${it.NPSN__c}</span>` : ''}`;
         li.addEventListener('click', () => {
           schoolSearch.value = it.Name;
-          schoolIdHidden.value = it.Id;      // WAJIB pakai Salesforce Id
+          schoolIdHidden.value = it.Id;
           schoolSug.hidden = true; schoolSug.innerHTML = '';
         });
         schoolSug.appendChild(li);
@@ -277,23 +273,17 @@ schoolSearch?.addEventListener('input', () => {
 });
 
 $('#prevBtn4')?.addEventListener('click', () => goToStep(3));
-$('#nextBtn4')?.addEventListener('click', () => {
-  if (!toggleSchoolManual?.checked && !isSfId($('#schoolId')?.value)) {
-    alert('Pilih sekolah dari daftar (bukan ketik manual).'); return;
-  }
-  goToStep(5);
-});
 
-// ========= STEP 5: Pas Foto =========
+// Pas Foto (validasi di step ini)
 const MAX_PHOTO = 1 * 1024 * 1024;
 const ALLOWED_PHOTO = ['image/jpeg','image/png'];
 let photoDataURL = null, photoFileName = null;
 
-const photoIn  = $('#photo'), photoErr = $('#photoError'), photoPrev = $('#photoPreview'), nextBtn5 = $('#nextBtn5');
+const photoIn  = $('#photo'), photoErr = $('#photoError'), photoPrev = $('#photoPreview');
 
 photoIn?.addEventListener('change', e => {
   photoErr.textContent = ''; photoPrev.style.display='none';
-  photoDataURL = null; photoFileName = null; nextBtn5.disabled = true;
+  photoDataURL = null; photoFileName = null;
 
   const file = e.target.files && e.target.files[0];
   if (!file) return;
@@ -304,15 +294,18 @@ photoIn?.addEventListener('change', e => {
   fr.onload = () => {
     photoDataURL = fr.result; photoFileName = file.name || 'pas-foto-3x4.jpg';
     photoPrev.src = fr.result; photoPrev.style.display='block';
-    nextBtn5.disabled = false;
     window.photoDataURL = photoDataURL; window.photoFileName = photoFileName;
   };
   fr.readAsDataURL(file);
 });
 
-$('#prevBtn5')?.addEventListener('click', () => goToStep(4));
-$('#nextBtn5')?.addEventListener('click', () => {
+$('#nextBtn4')?.addEventListener('click', () => {
+  if (!toggleSchoolManual?.checked && !isSfId($('#schoolId')?.value)) {
+    alert('Pilih sekolah dari daftar (bukan ketik manual).'); return;
+  }
   if (!photoDataURL) { photoErr.textContent = 'Unggah pas foto 3×4 terlebih dahulu.'; return; }
+
+  // Build ringkasan
   $('#sumName').textContent = `${$('#firstName').value} ${$('#lastName').value || ''}`.trim();
   $('#sumEmail').textContent = $('#email').value;
   $('#sumPhone').textContent = `+62${digits($('#phone').value)}`.replace('++','+');
@@ -322,11 +315,12 @@ $('#nextBtn5')?.addEventListener('click', () => {
   $('#sumGradYear').textContent = getSelectedText($('#gradYear')) || '-';
   const schoolManual = $('#schoolManualToggle')?.checked;
   $('#sumSchool').textContent = schoolManual ? ($('#schoolNameManual').value || '-') : ($('#schoolSearch').value || '-');
-  goToStep(6);
+
+  goToStep(5);
 });
 
-// ========= STEP 6: Submit =========
-$('#prevBtn6')?.addEventListener('click', () => goToStep(5));
+// ========= STEP 5: Submit =========
+$('#prevBtn5')?.addEventListener('click', () => goToStep(4));
 
 $('#submitBtn')?.addEventListener('click', async (e)=>{
   e.preventDefault();
@@ -350,7 +344,7 @@ $('#submitBtn')?.addEventListener('click', async (e)=>{
 
       campusId       : $('#campusId').value || null,
       campusName     : $('#campusName').value || null,
-      masterIntakeId : $('#intakeSelect').value || null, // opsional
+      masterIntakeId : $('#intakeSelect').value || null,
       intakeName     : getSelectedText($('#intakeSelect')) || null,
       studyProgramId : $('#studyProgramSelect').value || null,
       studyProgramName : getSelectedText($('#studyProgramSelect')) || null,

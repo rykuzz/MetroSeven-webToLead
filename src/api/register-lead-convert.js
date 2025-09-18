@@ -1,4 +1,3 @@
-// api/register-lead-convert.js
 const jsforce = require('jsforce');
 
 function digits(s){ return String(s||'').replace(/\D/g,''); }
@@ -7,23 +6,6 @@ function normalizePhone(raw){
   if(p.startsWith('0')) p = p.slice(1);
   if(!p.startsWith('62')) p = '62'+p;
   return '+'+p;
-}
-
-// Fallback RT ID (kamu kirim): University
-const OPP_RT_UNIVERSITY_FALLBACK = '012gL000002NZITQA4';
-
-async function getOppUniversityRT(conn) {
-  const r = await conn.query(
-    "SELECT Id, Name FROM RecordType WHERE SobjectType='Opportunity' AND Name='University' LIMIT 1"
-  );
-  return r.records?.[0]?.Id || null;
-}
-
-async function getPersonAccountRT(conn) {
-  const r = await conn.query(
-    "SELECT Id FROM RecordType WHERE SobjectType='Account' AND IsPersonType=true LIMIT 1"
-  );
-  return r.records?.[0]?.Id || null;
 }
 
 module.exports = async (req, res) => {
@@ -52,13 +34,17 @@ module.exports = async (req, res) => {
     const leadRes = await conn.query(soqlLead, { email: email.toLowerCase(), p1, p2 });
     const lead = leadRes.records?.[0];
 
-    if (lead) {
-      // Tandai agar Apex melakukan auto-convert
-      await conn.sobject('Lead').update(
-        { Id: lead.Id, Is_Convert__c: true },
-        { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' } }
-      );
+    async function getOppUniversityRT() {
+      const r = await conn.query("SELECT Id FROM RecordType WHERE SobjectType='Opportunity' AND Name='University' LIMIT 1");
+      return r.records?.[0]?.Id || null;
+    }
+    async function getPersonAcctRT() {
+      const r = await conn.query("SELECT Id FROM RecordType WHERE SobjectType='Account' AND IsPersonType=true LIMIT 1");
+      return r.records?.[0]?.Id || null;
+    }
 
+    if (lead) {
+      await conn.sobject('Lead').update({ Id: lead.Id, Is_Convert__c: true }, { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' }});
       if (lead.ConvertedOpportunityId) {
         const opp = await conn.sobject('Opportunity').retrieve(lead.ConvertedOpportunityId);
         return res.status(200).json({ success:true, opportunityId: opp.Id, accountId: opp.AccountId });
@@ -66,32 +52,27 @@ module.exports = async (req, res) => {
       return res.status(200).json({ success:true, message:'Lead ditandai untuk konversi' });
     }
 
-    // Tidak ada lead → buat Person Account + Opportunity (RT University)
-    const personRT = await getPersonAccountRT(conn);
-    const oppRT    = (await getOppUniversityRT(conn)) || OPP_RT_UNIVERSITY_FALLBACK;
+    // Lead tidak ada → langsung buat Person Account + Opportunity (RT University, Stage Booking Form)
+    const personRT = await getPersonAcctRT();
+    const oppRT    = await getOppUniversityRT();
 
-    const accIns = {
+    const acc = await conn.sobject('Account').create({
       RecordTypeId: personRT || undefined,
       LastName: lastName,
       FirstName: firstName,
       PersonEmail: email.toLowerCase(),
       PersonMobilePhone: normalizePhone(phone)
-    };
-    const acc = await conn.sobject('Account').create(accIns);
+    });
     if(!acc.success) throw new Error(acc.errors?.join(', ') || 'Gagal membuat Account');
 
     const closeDate = new Date(); closeDate.setDate(closeDate.getDate()+30);
-    const oppIns = {
-      RecordTypeId: oppRT, // ← dipastikan University by Name, fallback ID ini
+    const opp = await conn.sobject('Opportunity').create({
+      RecordTypeId: oppRT || undefined,
       AccountId: acc.id,
       Name: `${firstName} ${lastName}/REG`,
       StageName: 'Booking Form',
       CloseDate: closeDate.toISOString().slice(0,10)
-    };
-    const opp = await conn.sobject('Opportunity').create(
-      oppIns,
-      { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' } }
-    );
+    }, { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' }});
     if(!opp.success) throw new Error(opp.errors?.join(', ') || 'Gagal membuat Opportunity');
 
     return res.status(200).json({ success:true, opportunityId: opp.id, accountId: acc.id });

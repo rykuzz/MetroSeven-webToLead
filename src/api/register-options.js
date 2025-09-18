@@ -1,5 +1,4 @@
 const jsforce = require('jsforce');
-
 function escSOQL(v){ return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function inList(ids){ return "(" + ids.map(id => "'" + escSOQL(id) + "'").join(",") + ")"; }
 
@@ -40,11 +39,7 @@ module.exports = async (req, res) => {
           "AND Id IN (SELECT Study_Program_Faculty_Campus__c FROM Study_Program_Intake__c WHERE Master_Intake__c = '" + escSOQL(intakeId) + "')" +
           " ORDER BY Study_Program__r.Name";
         const r = await conn.query(soql);
-        const records = (r.records||[]).map(x=>({
-          Id: x.Id,
-          StudyProgramId: x.Study_Program__r.Id,
-          StudyProgramName: x.Study_Program__r.Name
-        }));
+        const records = (r.records||[]).map(x=>({ Id:x.Id, StudyProgramId:x.Study_Program__r.Id, StudyProgramName:x.Study_Program__r.Name }));
         return res.status(200).json({ success:true, records });
       }
 
@@ -84,20 +79,18 @@ module.exports = async (req, res) => {
           conn.sobject('Batch_Study_Program__c').retrieve(bspId),
           conn.sobject('Opportunity').retrieve(opportunityId),
         ]);
-
         const baseName = (opp.Name || '').split('/REG')[0] + '/REG';
         const newName = `${baseName}/${bsp.Name}`;
-
         await conn.sobject('Opportunity').update({ Id: opportunityId, Batch_Study_Program__c: bspId, Name: newName });
+
         return res.status(200).json({ success:true });
       }
-
       return res.status(400).json({ success:false, message: 'Unknown POST action' });
     }
 
-    return res.status(405).json({ success:false, message:'Method not allowed' });
+    res.status(405).json({ success:false, message:'Method not allowed' });
   } catch (err) {
     console.error('register-options ERR:', err);
-    return res.status(500).json({ success:false, message: err.message || 'Error' });
+    res.status(500).json({ success:false, message: err.message || 'Error' });
   }
 };

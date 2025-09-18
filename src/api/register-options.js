@@ -1,126 +1,117 @@
-// src/js/register-options.js
-(function () {
-  // Cari elemen dengan banyak kemungkinan ID/NAME agar tidak tergantung 1 ID saja
-  function pickOne(selectors) {
-    for (const s of selectors) {
-      const n = document.querySelector(s);
-      if (n) return n;
+// src/api/register-options.js
+// Endpoint opsi untuk wizard: campuses, intakes, programs (by campus)
+// Mengembalikan shape konsisten: { records: [...] }
+
+const jsforce = require('jsforce');
+
+module.exports = async (req, res) => {
+  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
+
+  const bad = (code, message, extra = {}) => res.status(code).json({ message, ...extra });
+  const ok  = (data) => res.status(200).json(data);
+  const esc = (s) => String(s || '').replace(/'/g, "\\'");
+
+  // NOTE: route ini dipanggil seperti: /api/register-options?type=campuses|intakes|programs&campusId=...
+  const { type, term = '', campusId = '' } = req.query || {};
+  if (!type) return bad(400, "type wajib diisi");
+
+  if (!SF_LOGIN_URL || !SF_USERNAME || !SF_PASSWORD) {
+    return bad(500, "ENV Salesforce belum lengkap", { hint: "SF_LOGIN_URL,SF_USERNAME,SF_PASSWORD" });
+  }
+
+  // Login SF
+  let conn;
+  try {
+    conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
+    await conn.login(SF_USERNAME, SF_PASSWORD);
+  } catch (e) {
+    console.error("SF login error:", e);
+    return bad(500, "Gagal login ke Salesforce", { error: String(e && e.message || e) });
+  }
+
+  try {
+    // ===================== CAMPUSES =====================
+    if (type === 'campuses' || type === 'campus') {
+      try {
+        const q = await conn.query(`
+          SELECT Id, Name
+          FROM Campus__c
+          WHERE Name LIKE '%${esc(term)}%'
+          ORDER BY Name
+          LIMIT 200
+        `);
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+        return ok({ records: q.records.map(r => ({ Id: r.Id, Name: r.Name })) });
+      } catch (e) {
+        // Fallback bila org tidak punya Campus__c → pakai distinct Account.Master_School__c
+        const msg = String(e && e.message || e);
+        const needFallback = /INVALID_TYPE|sObject type .* is not supported|No such column/i.test(msg);
+        if (!needFallback) {
+          console.error('campuses query error:', e);
+          return bad(500, 'Gagal query campuses', { error: msg });
+        }
+        try {
+          const q = await conn.query(`
+            SELECT Master_School__c
+            FROM Account
+            WHERE Master_School__c != null
+              AND Master_School__c LIKE '%${esc(term)}%'
+            GROUP BY Master_School__c
+            ORDER BY Master_School__c
+            LIMIT 200
+          `);
+          const rows = (q.records || []).map(r => ({
+            Id: r.Master_School__c,
+            Name: r.Master_School__c
+          }));
+          res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+          return ok({ records: rows, fallback: 'Account.Master_School__c' });
+        } catch (e2) {
+          console.error('campuses fallback error:', e2);
+          return bad(500, 'Gagal query fallback campuses', { error: String(e2 && e2.message || e2) });
+        }
+      }
     }
-    return null;
-  }
 
-  const NODE = {
-    campus: () =>
-      pickOne(['#campusSelect', '#campus', '#campus_id', 'select[name="campus"]']),
-    intake: () =>
-      pickOne(['#intakeSelect', '#intake', '#academicTerm', 'select[name="intake"]']),
-    program: () =>
-      pickOne(['#programSelect', '#studyProgram', '#study_program', 'select[name="program"]']),
-    campusError: () =>
-      pickOne(['#campusError', '.campus-error', '[data-error="campus"]']),
-  };
-
-  // PAKAI .js karena deploy kamu expose /api/*.js (lihat /api/ping.js)
-  const API = {
-    campus: '/api/salesforce-query.js?type=campus',
-    intake: '/api/salesforce-query.js?type=intake',
-    program: (campusId) =>
-      `/api/salesforce-query.js?type=program&campusId=${encodeURIComponent(campusId)}`,
-  };
-
-  async function fetchJSON(url) {
-    const r = await fetch(url, { headers: { Accept: 'application/json' } });
-    let payload = null;
-    try {
-      payload = await r.clone().json();
-    } catch (_) {}
-    if (!r.ok) {
-      const msg = payload && payload.message ? payload.message : `HTTP ${r.status}`;
-      throw new Error(msg);
+    // ===================== INTAKES =====================
+    if (type === 'intakes' || type === 'intake') {
+      const q = await conn.query(`
+        SELECT Id, Name, Academic_Year__c
+        FROM Master_Intake__c
+        WHERE Name LIKE '%${esc(term)}%'
+        ORDER BY Name DESC
+        LIMIT 200
+      `);
+      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+      return ok({
+        records: q.records.map(r => ({
+          Id: r.Id, Name: r.Name, Academic_Year__c: r.Academic_Year__c
+        }))
+      });
     }
-    return payload;
-  }
 
-  function renderSelect(node, placeholder, rows, map = (x) => x) {
-    if (!node) return; // kalau node ga ada, jangan meledak
-    node.innerHTML = '';
-    const ph = document.createElement('option');
-    ph.value = '';
-    ph.textContent = placeholder;
-    node.appendChild(ph);
-    (rows || []).map(map).forEach((r) => {
-      const opt = document.createElement('option');
-      opt.value = r.value;
-      opt.textContent = r.label;
-      node.appendChild(opt);
-    });
-  }
-
-  function setError(node, msg) {
-    if (node) node.textContent = msg || '';
-  }
-
-  async function loadCampus() {
-    const sel = NODE.campus();
-    const err = NODE.campusError();
-    try {
-      if (!sel) throw new Error('Elemen <select> Campus tidak ditemukan (cek ID/NAME HTML).');
-      const data = await fetchJSON(API.campus);
-      renderSelect(sel, 'Pilih campus', data.records, (r) => ({ value: r.Id, label: r.Name }));
-      setError(err, '');
-      console.debug('[Campus] loaded:', data.records?.length || 0);
-    } catch (e) {
-      console.error('loadCampus error:', e);
-      setError(err, `Gagal memuat campus: ${e.message}`);
-      renderSelect(sel || document.createElement('select'), 'Pilih campus', []);
+    // ===================== PROGRAMS (by campus) =====================
+    if (type === 'programs' || type === 'program') {
+      if (!campusId) return bad(400, 'campusId wajib diisi');
+      const q = await conn.query(`
+        SELECT Id, Name, Campus__c
+        FROM Study_Program__c
+        WHERE Campus__c = '${esc(campusId)}'
+          AND Name LIKE '%${esc(term)}%'
+        ORDER BY Name
+        LIMIT 200
+      `);
+      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+      return ok({
+        records: q.records.map(r => ({
+          Id: r.Id, Name: r.Name, Campus__c: r.Campus__c
+        }))
+      });
     }
-  }
 
-  async function loadIntakes() {
-    const sel = NODE.intake();
-    try {
-      if (!sel) return; // optional
-      const data = await fetchJSON(API.intake);
-      renderSelect(sel, 'Pilih tahun ajaran', data.records, (r) => ({ value: r.Id, label: r.Name }));
-      console.debug('[Intake] loaded:', data.records?.length || 0);
-    } catch (e) {
-      console.error('loadIntakes error:', e);
-      renderSelect(sel, 'Pilih tahun ajaran', []);
-    }
+    return bad(400, `type tidak dikenali: ${type}`);
+  } catch (e) {
+    console.error("register-options fatal:", e);
+    return bad(500, "Gagal memproses request", { error: String(e && e.message || e) });
   }
-
-  async function loadProgramsByCampus(campusId) {
-    const sel = NODE.program();
-    try {
-      if (!sel) return; // optional
-      if (!campusId) return renderSelect(sel, 'Pilih program', []);
-      const data = await fetchJSON(API.program(campusId));
-      renderSelect(sel, 'Pilih program', data.records, (r) => ({ value: r.Id, label: r.Name }));
-      console.debug('[Program] loaded:', data.records?.length || 0);
-    } catch (e) {
-      console.error('loadProgramsByCampus error:', e);
-      renderSelect(sel, 'Pilih program', []);
-    }
-  }
-
-  async function initRegistrationOptions() {
-    await Promise.all([loadCampus(), loadIntakes()]);
-    const campusSel = NODE.campus();
-    if (campusSel) {
-      campusSel.addEventListener('change', (ev) => loadProgramsByCampus(ev.target.value));
-    }
-  }
-
-  // Panggil otomatis saat DOM siap,
-  // tetapi tetap expose ke window untuk dipanggil manual dari wizard.
-  function onReady(fn) {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', fn);
-    } else {
-      fn();
-    }
-  }
-
-  onReady(initRegistrationOptions);
-  window.__RegisterOptions = { initRegistrationOptions, loadProgramsByCampus };
-})();
+};

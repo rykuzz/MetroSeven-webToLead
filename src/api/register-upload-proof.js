@@ -1,9 +1,8 @@
-// src/api/register-upload-proof.js
 const jsforce = require('jsforce');
 const multiparty = require('multiparty');
 
 const MAX_SIZE = 1024 * 1024;
-const ALLOWED = ['application/pdf','image/png','image/jpeg'];
+const ALLOWED = ['application/pdf','image/png','image/jpeg','image/jpg'];
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
@@ -24,7 +23,7 @@ module.exports = async (req, res) => {
     if (!opportunityId || !accountId || !file) throw new Error('Data tidak lengkap');
     if (file.size > MAX_SIZE) throw new Error('Ukuran file maksimal 1MB');
     const ctype = file.headers?.['content-type'] || '';
-    if (ctype && !ALLOWED.includes(ctype)) throw new Error('Format file harus PDF/PNG/JPG/PDF');
+    if (ctype && !ALLOWED.includes(ctype)) throw new Error('Format file harus PDF/PNG/JPG');
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
@@ -33,7 +32,7 @@ module.exports = async (req, res) => {
     const ext = path.extname(file.originalFilename || '').replace('.','').toLowerCase() || 'pdf';
     const title = `BuktiBayar-${opportunityId}-${new Date().toISOString().slice(0,10)}`;
 
-    // Upload & relate ke Opportunity
+    // File → Opportunity
     const cv = await conn.sobject('ContentVersion').create({
       Title: title,
       PathOnClient: `${title}.${ext}`,
@@ -42,7 +41,7 @@ module.exports = async (req, res) => {
     });
     if (!cv.success) throw new Error(cv.errors?.join(', ') || 'Gagal upload bukti');
 
-    // Dapatkan ContentDocumentId lalu relate juga ke Account (agar muncul di Account Documents)
+    // Optional: link juga ke Account (biar muncul di Files Account)
     const q = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cv.id}' LIMIT 1`);
     const docId = q.records?.[0]?.ContentDocumentId;
     if (docId) {
@@ -53,7 +52,7 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Set flag & stage
+    // Centang checkbox + set stage
     await conn.sobject('Opportunity').update({
       Id: opportunityId,
       Is_Booking_Fee_Paid__c: true,

@@ -13,8 +13,10 @@ module.exports = async (req, res) => {
       const { type } = query;
 
       if (type === 'campuses') {
-        const r = await conn.query("SELECT Id, Name FROM Campus__c WHERE IsActive__c = true ORDER BY Name");
-        return res.status(200).json({ success:true, records: r.records });
+        const r = await conn.query(
+          "SELECT Id, Name FROM Campus__c WHERE IsActive__c = true ORDER BY Name"
+        );
+        return res.status(200).json({ success: true, records: r.records });
       }
 
       if (type === 'intakes') {
@@ -26,16 +28,22 @@ module.exports = async (req, res) => {
           ORDER BY Start_Date__c DESC
         `;
         const r = await conn.query(soql, { campusId });
-        return res.status(200).json({ success:true, records: r.records });
+        return res.status(200).json({ success: true, records: r.records });
       }
 
       if (type === 'programs') {
         const { campusId, intakeId } = query;
-        // dapatkan Faculty_Campus__c
-        const fc = await conn.query("SELECT Id FROM Faculty_Campus__c WHERE Campus__c = :campusId LIMIT 100", { campusId });
-        const fcIds = fc.records.map(x=>x.Id);
-        if (!fcIds.length) return res.status(200).json({ success:true, records: [] });
 
+        // Dapatkan Faculty_Campus__c
+        const fc = await conn.query(
+          "SELECT Id FROM Faculty_Campus__c WHERE Campus__c = :campusId LIMIT 100",
+          { campusId }
+        );
+        const fcIds = (fc.records || []).map((x) => x.Id);
+        if (!fcIds.length)
+          return res.status(200).json({ success: true, records: [] });
+
+        // Program yang tersedia untuk Campus & Intake
         const soql = `
           SELECT Id, Study_Program__r.Id, Study_Program__r.Name
           FROM Study_Program_Faculty_Campus__c
@@ -48,12 +56,12 @@ module.exports = async (req, res) => {
           ORDER BY Study_Program__r.Name
         `;
         const r = await conn.query(soql, { fcIds, intakeId });
-        const records = (r.records||[]).map(x=>({
+        const records = (r.records || []).map((x) => ({
           Id: x.Id,
           StudyProgramId: x.Study_Program__r.Id,
-          StudyProgramName: x.Study_Program__r.Name
+          StudyProgramName: x.Study_Program__r.Name,
         }));
-        return res.status(200).json({ success:true, records });
+        return res.status(200).json({ success: true, records });
       }
 
       if (type === 'masterBatch') {
@@ -69,7 +77,9 @@ module.exports = async (req, res) => {
         `;
         const r = await conn.query(soql, { intakeId, dateVal: date });
         const rec = r.records?.[0];
-        return res.status(200).json({ success:true, id: rec?.Id || null, name: rec?.Name || null });
+        return res
+          .status(200)
+          .json({ success: true, id: rec?.Id || null, name: rec?.Name || null });
       }
 
       if (type === 'bsp') {
@@ -83,42 +93,52 @@ module.exports = async (req, res) => {
         `;
         const r = await conn.query(soql, { masterBatchId, studyProgramId });
         const rec = r.records?.[0];
-        return res.status(200).json({ success:true, id: rec?.Id || null, name: rec?.Name || null });
+        return res
+          .status(200)
+          .json({ success: true, id: rec?.Id || null, name: rec?.Name || null });
       }
 
-      return res.status(400).json({ success:false, message: 'Unknown GET type' });
+      return res.status(400).json({ success: false, message: 'Unknown GET type' });
     }
 
     if (method === 'POST') {
-      // action: saveReg → simpan BSP ke Opportunity + update name
+      // Simpan pilihan registrasi ke Opportunity (+ perbarui nama)
       if (body?.action === 'saveReg') {
-        const { opportunityId, bspId } = body;
-        if (!opportunityId || !bspId) throw new Error('Param kurang');
+        const { opportunityId, campusId, intakeId, studyProgramId, bspId } = body;
+        if (!opportunityId || !campusId || !intakeId || !studyProgramId || !bspId) {
+          throw new Error('Param kurang');
+        }
 
-        // Ambil nama BSP untuk append ke Opportunity Name
+        // Ambil BSP untuk nama
         const bsp = await conn.sobject('Batch_Study_Program__c').retrieve(bspId);
 
-        // Update Opp
+        // Update field di Opportunity:
+        // - Campus__c (sesuai brief)
+        // - Batch_Study_Program__c
         await conn.sobject('Opportunity').update({
           Id: opportunityId,
+          Campus__c: campusId,
           Batch_Study_Program__c: bspId,
-          Name: `{!Opportunity.Name}` // placeholder but not workable in API
         });
 
-        // Kita perlu ambil nama opp lama, lalu append:
+        // Susun ulang Opportunity.Name → "First Last/REG/{BSP}"
         const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
-        const newName = `${opp.Name.split('/REG')[0]}/REG/${bsp.Name}`;
+        // Pola dasar dari brief: "{First} {Last}/REG"
+        const base = (opp.Name || '').split('/REG')[0]; // "First Last"
+        const newName = `${base}/REG/${bsp.Name}`;
         await conn.sobject('Opportunity').update({ Id: opportunityId, Name: newName });
 
-        return res.status(200).json({ success:true });
+        return res.status(200).json({ success: true });
       }
 
-      return res.status(400).json({ success:false, message: 'Unknown POST action' });
+      return res.status(400).json({ success: false, message: 'Unknown POST action' });
     }
 
-    return res.status(405).json({ success:false, message:'Method not allowed' });
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
   } catch (err) {
     console.error('register-options ERR:', err);
-    return res.status(500).json({ success:false, message: err.message || 'Error' });
+    return res
+      .status(500)
+      .json({ success: false, message: err.message || 'Error' });
   }
 };

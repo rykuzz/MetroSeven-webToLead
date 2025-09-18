@@ -1,4 +1,4 @@
-// src/api/register-finalize.js
+// api/register-finalize.js
 const jsforce = require('jsforce');
 const crypto = require('crypto');
 
@@ -14,36 +14,31 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // -------- Ambil data untuk penyusunan nama & kredensial --------
-    // Ambil Opportunity (butuh BSP untuk nama)
-    const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
-    // Ambil Account (Person Account: FirstName/LastName)
+    // Ambil data untuk rename + credentials
     const acc = await conn.sobject('Account').retrieve(accountId);
+    const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
 
-    // Ambil nama BSP jika ada
-    let bspName = '';
-    if (opp.Batch_Study_Program__c) {
-      const bsp = await conn
-        .sobject('Batch_Study_Program__c')
-        .retrieve(opp.Batch_Study_Program__c);
-      bspName = bsp?.Name || '';
+    // Ambil Study Program Name (kalau field relasi tersedia)
+    let studyProgramName = '';
+    if (opp.Study_Program__c) {
+      const sp = await conn.sobject('Study_Program__c').retrieve(opp.Study_Program__c);
+      studyProgramName = sp?.Name || '';
     }
 
-    // Susun nama Opportunity sesuai brief:
-    // "FirstName LastName/REG/Batch Study Program Name"
+    // Susun nama: "First Last/REG/{Study Program Name}" (tanpa BSP)
     const first = (acc.FirstName || '').trim();
     const last  = (acc.LastName  || '').trim();
     const base  = `${first} ${last}`.trim();
-    const newOppName = bspName ? `${base}/REG/${bspName}` : `${base}/REG`;
+    const newOppName = studyProgramName ? `${base}/REG/${studyProgramName}` : `${base}/REG`;
 
-    // -------- Update Stage & Name pada Opportunity --------
+    // Update Stage + Name
     await conn.sobject('Opportunity').update({
       Id: opportunityId,
       StageName: 'Registration',
       Name: newOppName
     });
 
-    // -------- Generate & simpan credentials --------
+    // Credentials
     const year = (opp.CreatedDate || '').slice(0,4) || (new Date().getFullYear().toString());
     const username = `${first}${last}`.replace(/\s+/g,'').toLowerCase();
     const passwordPlain = `m7u${first.toLowerCase()}${year}`;

@@ -4,7 +4,6 @@ function escSOQL(v){ return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') return res.status(405).json({ success:false, message:'Method not allowed' });
-
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
   const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
 
@@ -31,10 +30,9 @@ module.exports = async (req, res) => {
       const opp = await conn.sobject('Opportunity').retrieve(lead.ConvertedOpportunityId);
       return res.status(200).json({ success:true, opportunityId: opp.Id, accountId: opp.AccountId });
     }
-
-    return res.status(200).json({ success:true, opportunityId: null });
+    res.status(200).json({ success:true, opportunityId: null });
   } catch (err) {
     console.error('register-status ERR:', err);
-    return res.status(500).json({ success:false, message: err.message || 'Status check failed' });
+    res.status(500).json({ success:false, message: err.message || 'Status check failed' });
   }
 };

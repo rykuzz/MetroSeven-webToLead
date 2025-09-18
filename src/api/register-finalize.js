@@ -13,25 +13,19 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
+    // Stage -> Registration
+    await conn.sobject('Opportunity').update({ Id: opportunityId, StageName: 'Registration' });
+
+    // Generate credentials
     const acc = await conn.sobject('Account').retrieve(accountId);
     const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
 
-    let studyProgramName = '';
-    if (opp.Study_Program__c) {
-      const sp = await conn.sobject('Study_Program__c').retrieve(opp.Study_Program__c);
-      studyProgramName = sp?.Name || '';
-    }
-
-    const first = (acc.FirstName || '').trim();
-    const last  = (acc.LastName  || '').trim();
-    const base  = `${first} ${last}`.trim();
-    const newOppName = studyProgramName ? `${base}/REG/${studyProgramName}` : `${base}/REG`;
-
-    await conn.sobject('Opportunity').update({ Id: opportunityId, StageName: 'Registration', Name: newOppName });
+    const first = (acc.FirstName || '').toLowerCase();
+    const last  = (acc.LastName  || '').toLowerCase();
+    const username = `${first}${last}`.replace(/\s+/g,'');
 
     const year = (opp.CreatedDate || '').slice(0,4) || (new Date().getFullYear().toString());
-    const username = `${first}${last}`.replace(/\s+/g,'').toLowerCase();
-    const passwordPlain = `m7u${first.toLowerCase()}${year}`;
+    const passwordPlain = `m7u${first}${year}`;
     const passwordHash = crypto.createHash('sha256').update(passwordPlain).digest('hex');
 
     await conn.sobject('Account').update({ Id: accountId, Password__c: passwordHash });

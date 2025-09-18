@@ -1,29 +1,20 @@
-// Endpoint opsi wizard: campuses, intakes, programs
-// - programs sekarang difilter by intakeId (opsional bisa digabung campusId)
-// - intakes hanya kirim {Id, Name}
+// src/api/register-options.js
+// Wizard options: campuses, intakes (Name only), programs (by intakeId; optional campusId)
+// Aman untuk berbagai skema: mencoba beberapa pola, tidak melempar 500 ketika skema beda.
 
 const jsforce = require('jsforce');
+const esc = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
 module.exports = async (req, res) => {
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
-  const { type, term = '', campusId = '', intakeId = '' } = req.query || {};
+  const { method, query } = req;
+  if (method !== 'GET' && method !== 'POST') {
+    return res.status(405).json({ success: false, message: 'Method not allowed' });
+  }
 
   const send = (code, obj) => res.status(code).json(obj);
   const ok   = (data) => send(200, data);
-  const fail = (code, message, extra = {}) => send(code, { message, ...extra });
-  const esc  = (s) => String(s || '').replace(/'/g, "\\'");
-
-  if (!type) return fail(400, 'type wajib diisi');
-
-  function yearFallback(rangeBack = 5, rangeFwd = 1) {
-    const y = new Date().getFullYear();
-    const arr = [];
-    for (let yr = y + rangeFwd; yr >= y - rangeBack; yr--) {
-      const name = `${yr}/${yr + 1}`;
-      arr.push({ Id: name, Name: name });
-    }
-    return arr;
-  }
+  const fail = (code, msg, extra = {}) => send(code, { success: false, message: msg, ...extra });
 
   async function login() {
     if (!SF_LOGIN_URL || !SF_USERNAME || !SF_PASSWORD) {
@@ -35,129 +26,150 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // ========= CAMPUSES =========
-    if (type === 'campuses' || type === 'campus') {
-      const conn = await login();
-      try {
-        const q = await conn.query(`
-          SELECT Id, Name
-          FROM Campus__c
-          WHERE Name LIKE '%${esc(term)}%'
-          ORDER BY Name
-          LIMIT 200
-        `);
-        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-        return ok({ records: q.records.map(r => ({ Id: r.Id, Name: r.Name })) });
-      } catch (e) {
-        const msg = String(e && e.message || e);
-        const fallbackable = /INVALID_TYPE|sObject type .* is not supported|No such column/i.test(msg);
-        if (!fallbackable) return fail(500, 'Gagal query campuses', { error: msg });
+    // ---------- GET ----------
+    if (method === 'GET') {
+      const { type, term = '', campusId = '', intakeId = '' } = query || {};
+      if (!type) return fail(400, 'type wajib diisi');
 
-        // Fallback: distinct Account.Master_School__c
-        const q = await (await login()).query(`
-          SELECT Master_School__c
-          FROM Account
-          WHERE Master_School__c != null
-            AND Master_School__c LIKE '%${esc(term)}%'
-          GROUP BY Master_School__c
-          ORDER BY Master_School__c
-          LIMIT 200
-        `);
-        const rows = (q.records || []).map(r => ({ Id: r.Master_School__c, Name: r.Master_School__c }));
-        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-        return ok({ records: rows, fallback: 'Account.Master_School__c' });
-      }
-    }
-
-    // ========= INTAKES (Name saja) =========
-    if (type === 'intakes' || type === 'intake') {
-      try {
+      // CAMPUSES
+      if (type === 'campuses' || type === 'campus') {
         const conn = await login();
-        const q = await conn.query(`
-          SELECT Id, Name
-          FROM Master_Intake__c
-          WHERE Name LIKE '%${esc(term)}%'
-          ORDER BY Name DESC
-          LIMIT 200
-        `);
-        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-        return ok({ records: q.records.map(r => ({ Id: r.Id, Name: r.Name })) });
-      } catch (e) {
-        return ok({ records: yearFallback(), fallback: 'dynamic-years', error: String(e && e.message || e) });
-      }
-    }
+        try {
+          const r = await conn.query(`
+            SELECT Id, Name
+            FROM Campus__c
+            ${term ? `WHERE Name LIKE '%${esc(term)}%'` : ''}
+            ORDER BY Name
+            LIMIT 200
+          `);
+          res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+          return ok({ success: true, records: r.records });
+        } catch (e) {
+          // Fallback: distinct Account.Master_School__c jika Campus__c tidak ada
+          const msg = String(e && e.message || e);
+          const fallbackable = /INVALID_TYPE|No such column|is not supported/i.test(msg);
+          if (!fallbackable) return ok({ success: true, records: [], errors: [msg], source: 'campuses:err' });
 
-    // ========= PROGRAMS (by intakeId; optional campusId) =========
-    if (type === 'programs' || type === 'program') {
-      if (!intakeId) return fail(400, 'intakeId wajib diisi');
-
-      const conn = await login();
-
-      // Kita coba beberapa kemungkinan skema, urutkan prioritas:
-      // 1) Junction object Program_Intake__c (relasi many-to-many)
-      // 2) Study_Program__c dengan lookup Master_Intake__c
-      // 3) Study_Program__c dengan lookup Intake__c
-      // (opsional filter campusId jika ada field Campus__c)
-
-      // 1) Program_Intake__c (Program__c -> Study_Program__c, Intake__c -> Master_Intake__c)
-      try {
-        const q1 = await conn.query(`
-          SELECT Program__c, Program__r.Name
-          FROM Program_Intake__c
-          WHERE Intake__c = '${esc(intakeId)}'
-            AND Program__r.Name LIKE '%${esc(term)}%'
-          LIMIT 500
-        `);
-        if (q1.totalSize > 0) {
-          const rows = q1.records.map(r => ({ Id: r.Program__c, Name: r.Program__r?.Name }));
-          return ok({ records: rows, source: 'Program_Intake__c' });
+          const r2 = await conn.query(`
+            SELECT Master_School__c
+            FROM Account
+            WHERE Master_School__c != null
+              ${term ? `AND Master_School__c LIKE '%${esc(term)}%'` : ''}
+            GROUP BY Master_School__c
+            ORDER BY Master_School__c
+            LIMIT 200
+          `);
+          const rows = (r2.records || []).map(x => ({ Id: x.Master_School__c, Name: x.Master_School__c }));
+          return ok({ success: true, records: rows, fallback: 'Account.Master_School__c' });
         }
-      } catch (_) { /* ignore */ }
-
-      // 2) Study_Program__c dengan Master_Intake__c
-      try {
-        const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
-        const q2 = await conn.query(`
-          SELECT Id, Name
-          FROM Study_Program__c
-          WHERE Master_Intake__c = '${esc(intakeId)}'
-            ${campusFilter}
-            AND Name LIKE '%${esc(term)}%'
-          ORDER BY Name
-          LIMIT 500
-        `);
-        if (q2.totalSize > 0) {
-          const rows = q2.records.map(r => ({ Id: r.Id, Name: r.Name }));
-          return ok({ records: rows, source: 'Study_Program__c.Master_Intake__c' });
-        }
-      } catch (_) { /* ignore */ }
-
-      // 3) Study_Program__c dengan Intake__c
-      try {
-        const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
-        const q3 = await conn.query(`
-          SELECT Id, Name
-          FROM Study_Program__c
-          WHERE Intake__c = '${esc(intakeId)}'
-            ${campusFilter}
-            AND Name LIKE '%${esc(term)}%'
-          ORDER BY Name
-          LIMIT 500
-        `);
-        if (q3.totalSize > 0) {
-          const rows = q3.records.map(r => ({ Id: r.Id, Name: r.Name }));
-          return ok({ records: rows, source: 'Study_Program__c.Intake__c' });
-        }
-      } catch (e) {
-        return fail(500, 'Gagal query programs', { error: String(e && e.message || e) });
       }
 
-      // Jika semua gagal/0 record
-      return ok({ records: [], source: 'not-found' });
+      // INTAKES (Name saja)
+      if (type === 'intakes' || type === 'intake') {
+        const conn = await login();
+        try {
+          const r = await conn.query(`
+            SELECT Id, Name
+            FROM Master_Intake__c
+            ${campusId ? `WHERE Campus__c = '${esc(campusId)}'` : ''}
+            ORDER BY Name DESC
+            LIMIT 200
+          `);
+          res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+          return ok({ success: true, records: r.records });
+        } catch (e) {
+          // Fallback dinamis tahun ajaran (Name saja)
+          const now = new Date(); const y = now.getFullYear();
+          const fallback = [];
+          for (let yr = y + 1; yr >= y - 5; yr--) {
+            const name = `${yr}/${yr + 1}`;
+            fallback.push({ Id: name, Name: name });
+          }
+          return ok({ success: true, records: fallback, fallback: 'dynamic-years', errors: [String(e && e.message || e)] });
+        }
+      }
+
+      // PROGRAMS (utamakan by intakeId; campusId opsional)
+      if (type === 'programs' || type === 'program') {
+        if (!intakeId) return fail(400, 'intakeId wajib diisi');
+
+        const conn = await login();
+        const errors = [];
+        let rows = null;
+
+        // Try 1: Junction Study_Program_Intake__c (relasi: Master_Intake__c → Study_Program__c)
+        try {
+          const campusFilter = campusId ? `AND (Study_Program__r.Campus__c = '${esc(campusId)}')` : '';
+          const q1 = await conn.query(`
+            SELECT Study_Program__c, Study_Program__r.Name
+            FROM Study_Program_Intake__c
+            WHERE Master_Intake__c = '${esc(intakeId)}'
+              ${campusFilter}
+            ORDER BY Study_Program__r.Name
+            LIMIT 500
+          `);
+          if (q1.totalSize > 0) {
+            rows = q1.records.map(r => ({ Id: r.Study_Program__c, Name: r.Study_Program__r?.Name }));
+          }
+        } catch (e) { errors.push('SPI__c: ' + (e.message || String(e))); }
+
+        // Try 2: Study_Program__c punya lookup Master_Intake__c
+        if (!rows || rows.length === 0) {
+          try {
+            const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
+            const q2 = await conn.query(`
+              SELECT Id, Name
+              FROM Study_Program__c
+              WHERE Master_Intake__c = '${esc(intakeId)}'
+                ${campusFilter}
+              ORDER BY Name
+              LIMIT 500
+            `);
+            if (q2.totalSize > 0) rows = q2.records.map(r => ({ Id: r.Id, Name: r.Name }));
+          } catch (e) { errors.push('SP.Master_Intake__c: ' + (e.message || String(e))); }
+        }
+
+        // Try 3: Study_Program__c punya lookup Intake__c (nama field alternatif)
+        if (!rows || rows.length === 0) {
+          try {
+            const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
+            const q3 = await conn.query(`
+              SELECT Id, Name
+              FROM Study_Program__c
+              WHERE Intake__c = '${esc(intakeId)}'
+                ${campusFilter}
+              ORDER BY Name
+              LIMIT 500
+            `);
+            if (q3.totalSize > 0) rows = q3.records.map(r => ({ Id: r.Id, Name: r.Name }));
+          } catch (e) { errors.push('SP.Intake__c: ' + (e.message || String(e))); }
+        }
+
+        // Try 4: Fallback — by Campus saja (kalau memang intake tdk mereferensi program di org ini)
+        if ((!rows || rows.length === 0) && campusId) {
+          try {
+            const q4 = await conn.query(`
+              SELECT Id, Name
+              FROM Study_Program__c
+              WHERE Campus__c = '${esc(campusId)}'
+              ORDER BY Name
+              LIMIT 500
+            `);
+            if (q4.totalSize > 0) rows = q4.records.map(r => ({ Id: r.Id, Name: r.Name }));
+          } catch (e) { errors.push('SP.byCampus: ' + (e.message || String(e))); }
+        }
+
+        return ok({ success: true, records: rows || [], source: rows && rows.length ? 'resolved' : 'not-found', errors: errors.length ? errors : undefined });
+      }
+
+      return fail(400, 'Unknown GET type');
     }
 
-    return fail(400, `type tidak dikenali: ${type}`);
-  } catch (e) {
-    return fail(500, 'Gagal memproses request', { error: String(e && e.message || e) });
+    // ---------- POST ----------
+    // (biarkan handler POST lama—saveReg, dll—kalau kamu masih memakainya)
+    return fail(400, 'Unknown POST action');
+  } catch (err) {
+    // Hanya jatuh ke 500 untuk error yang benar2 fatal (ENV/login)
+    return fail(500, err.message || 'Gagal memproses request');
   }
 };

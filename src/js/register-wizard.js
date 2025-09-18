@@ -1,7 +1,9 @@
-// src/js/register-wizard.js
+// src/js/register-wizard.js  (FINAL)
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  // ===== Utilities
   const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').toLowerCase());
   const digits = (s) => String(s || '').replace(/\D/g, '');
   const normalizePhone = (raw) => {
@@ -12,6 +14,24 @@
     return '+' + p;
   };
 
+  // Safe API: auto-parse JSON, fallback ke text bila bukan JSON
+  async function api(url, opts) {
+    const res = await fetch(url, opts);
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      const t = await res.text().catch(() => '');
+      const msg = (t || '').slice(0, 400) || 'Server mengembalikan respons non-JSON';
+      throw new Error(msg);
+    }
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.message || `Permintaan gagal (${res.status})`);
+    }
+    return data;
+  }
+
+  // ===== Local Storage State
   const K = (k) => `m7_reg_${k}`;
   const S = {
     get opp() { return localStorage.getItem(K('opp')) || ''; },
@@ -26,6 +46,7 @@
     get sekolah(){ try{ return JSON.parse(localStorage.getItem(K('sekolah'))||'{}'); }catch{ return {}; } },
   };
 
+  // ===== UI
   function updateProgress(currentStep) {
     $$('#progressSteps .step-item').forEach(li => {
       const step = Number(li.dataset.step);
@@ -45,17 +66,19 @@
   const closeLoading = () => Swal.close();
   const showError = (m) => Swal.fire({ icon:'error', title:'Gagal', text: m||'Terjadi kesalahan' });
 
+  // ===== Poll status konversi Lead
   async function pollStatus(email, phone) {
     for (let i = 0; i < 10; i++) {
-      const r = await fetch(`/api/register-status?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`);
-      const j = await r.json();
-      if (j.success && j.opportunityId) return j;
+      try {
+        const j = await api(`/api/register-status?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`);
+        if (j.opportunityId) return j;
+      } catch { /* abaikan & retry */ }
       await new Promise(res => setTimeout(res, 1000));
     }
     return null;
   }
 
-  // STEP 1
+  // ===== STEP 1: Data Pemohon
   $('#formStep1').addEventListener('submit', async (e) => {
     e.preventDefault();
     const firstName = $('#firstName').value.trim();
@@ -71,12 +94,10 @@
     try {
       showLoading('Menyiapkan data Anda…');
 
-      const r = await fetch('/api/register-lead-convert', {
+      const j = await api('/api/register-lead-convert', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ firstName, lastName, email, phone })
       });
-      const j = await r.json();
-      if (!r.ok || !j.success) throw new Error(j.message || 'Gagal memproses');
 
       let oppId = j.opportunityId, accId = j.accountId;
       if (!oppId) {
@@ -95,7 +116,7 @@
     } catch (err) { closeLoading(); showError(err.message); }
   });
 
-  // STEP 2
+  // ===== STEP 2: Bukti Pembayaran
   $('#btnBack2').addEventListener('click', () => setStep(1));
   $('#formStep2').addEventListener('submit', async (e)=>{
     e.preventDefault();
@@ -115,8 +136,7 @@
       form.append('file', file);
       form.append('opportunityId', oppId);
       form.append('accountId', accId);
-      const r = await fetch('/api/register-upload-proof', { method:'POST', body: form });
-      const j = await r.json(); if(!r.ok || !j.success) throw new Error(j.message || 'Upload gagal');
+      await api('/api/register-upload-proof', { method:'POST', body: form });
 
       closeLoading(); toastOk('Bukti pembayaran berhasil diupload.');
       setStep(3);
@@ -124,12 +144,12 @@
     } catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // STEP 3
+  // ===== STEP 3: Preferensi Studi
   async function loadCampuses() {
     const wrap = $('#campusRadios'); wrap.innerHTML = '<div class="note">Memuat…</div>';
     try {
-      const r = await fetch('/api/register-options?type=campuses');
-      const j = await r.json(); const recs = j.records || [];
+      const j = await api('/api/register-options?type=campuses');
+      const recs = j.records || [];
       if (!recs.length) { wrap.innerHTML = '<div class="field-error">Data campus tidak tersedia.</div>'; return; }
       wrap.innerHTML = '';
       recs.forEach((c, i)=>{
@@ -143,23 +163,23 @@
   }
   async function loadIntakes(campusId){
     const sel = $('#intakeSelect'); sel.innerHTML = '<option value="">Memuat…</option>';
-    const r = await fetch(`/api/register-options?type=intakes&campusId=${encodeURIComponent(campusId)}`);
-    const j = await r.json(); const recs = j.records || [];
+    const j = await api(`/api/register-options?type=intakes&campusId=${encodeURIComponent(campusId)}`);
+    const recs = j.records || [];
     sel.innerHTML = '<option value="">Pilih tahun ajaran</option>';
     recs.forEach(x => sel.innerHTML += `<option value="${x.Id}">${x.Name}</option>`);
   }
   async function loadPrograms(campusId, intakeId){
     const sel = $('#programSelect'); sel.innerHTML = '<option value="">Memuat…</option>';
-    const r = await fetch(`/api/register-options?type=programs&campusId=${encodeURIComponent(campusId)}&intakeId=${encodeURIComponent(intakeId)}`);
-    const j = await r.json(); const recs = j.records || [];
+    const j = await api(`/api/register-options?type=programs&campusId=${encodeURIComponent(campusId)}&intakeId=${encodeURIComponent(intakeId)}`);
+    const recs = j.records || [];
     sel.innerHTML = '<option value="">Pilih program</option>';
     recs.forEach(x => sel.innerHTML += `<option value="${x.StudyProgramId}">${x.StudyProgramName}</option>`);
   }
   async function resolveBSP(intakeId, studyProgramId){
     const today = new Date().toISOString().slice(0,10);
-    const mb = await fetch(`/api/register-options?type=masterBatch&intakeId=${encodeURIComponent(intakeId)}&date=${today}`).then(r=>r.json());
+    const mb = await api(`/api/register-options?type=masterBatch&intakeId=${encodeURIComponent(intakeId)}&date=${today}`);
     if (!mb || !mb.id) throw new Error('Batch untuk intake ini belum tersedia.');
-    const bsp = await fetch(`/api/register-options?type=bsp&masterBatchId=${encodeURIComponent(mb.id)}&studyProgramId=${encodeURIComponent(studyProgramId)}`).then(r=>r.json());
+    const bsp = await api(`/api/register-options?type=bsp&masterBatchId=${encodeURIComponent(mb.id)}&studyProgramId=${encodeURIComponent(studyProgramId)}`);
     if (!bsp || !bsp.id) throw new Error('Batch Study Program belum tersedia.');
     return { bspId: bsp.id, bspName: bsp.name };
   }
@@ -182,11 +202,10 @@
       showLoading('Menyimpan pilihan program…');
       const { bspId, bspName } = await resolveBSP(intakeId, programId);
 
-      const r = await fetch('/api/register-options', {
+      await api('/api/register-options', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ action:'saveReg', opportunityId: S.opp, campusId, intakeId, studyProgramId: programId, bspId })
       });
-      const j = await r.json(); if(!r.ok || !j.success) throw new Error(j.message || 'Gagal menyimpan');
 
       S.reg = { campusId, intakeId, programId, bspId, bspName };
       closeLoading(); toastOk('Preferensi studi tersimpan.');
@@ -203,7 +222,7 @@
     if (campusId && intakeId) await loadPrograms(campusId, intakeId);
   });
 
-  // STEP 4
+  // ===== STEP 4: Sekolah + Pas Foto
   function populateYears(){
     const sel = $('#gradYearSelect');
     const now = new Date().getFullYear();
@@ -227,18 +246,17 @@
 
     try{
       showLoading('Menyimpan data sekolah & pas foto…');
-      const r1 = await fetch('/api/register-save-education', {
+
+      await api('/api/register-save-education', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ opportunityId: oppId, accountId: accId, masterSchoolId: schoolId||null, schoolName, graduationYear: gradYear })
       });
-      const j1 = await r1.json(); if(!r1.ok || !j1.success) throw new Error(j1.message || 'Gagal menyimpan data sekolah');
 
       const form = new FormData();
       form.append('file', photo);
       form.append('opportunityId', oppId);
       form.append('accountId', accId);
-      const r2 = await fetch('/api/register-upload-photo', { method:'POST', body: form });
-      const j2 = await r2.json(); if(!r2.ok || !j2.success) throw new Error(j2.message || 'Upload pas foto gagal');
+      await api('/api/register-upload-photo', { method:'POST', body: form });
 
       S.sekolah = { schoolId, schoolName, gradYear, photoName: photo.name };
       closeLoading(); toastOk('Data sekolah & pas foto tersimpan.');
@@ -246,7 +264,7 @@
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // STEP 5
+  // ===== STEP 5: Review & Submit
   $('#btnBack5').addEventListener('click', () => setStep(4));
   function buildReview(){
     const p = S.pemohon, r = S.reg, s = S.sekolah;
@@ -273,11 +291,10 @@
   $('#btnSubmitFinal').addEventListener('click', async ()=>{
     try{
       showLoading('Menyelesaikan registrasi…');
-      const r = await fetch('/api/register-finalize', {
+      const j = await api('/api/register-finalize', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ opportunityId: S.opp, accountId: S.acc })
       });
-      const j = await r.json(); if(!r.ok || !j.success) throw new Error(j.message || 'Gagal menyelesaikan registrasi');
 
       closeLoading();
       Swal.fire({
@@ -295,6 +312,7 @@
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
+  // Init (contoh VA static; opsional)
   document.addEventListener('DOMContentLoaded', () => {
     const VA = { bank: 'BCA', number: '8888800123456789' };
     $('#vaBank') && ($('#vaBank').textContent = VA.bank);

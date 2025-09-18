@@ -1,17 +1,11 @@
 const jsforce = require('jsforce');
 
 function digits(s){ return String(s||'').replace(/\D/g,''); }
-function normalizePhone(raw){
-  let p = digits(raw||''); if(!p) return null;
-  if(p.startsWith('0')) p = p.slice(1);
-  if(!p.startsWith('62')) p = '62'+p;
-  return '+'+p;
-}
+function normalizePhone(raw){ let p=digits(raw||''); if(!p) return null; if(p.startsWith('0')) p=p.slice(1); if(!p.startsWith('62')) p='62'+p; return '+'+p; }
 function escSOQL(v){ return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
-
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
   const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
 
@@ -34,17 +28,11 @@ module.exports = async (req, res) => {
     const leadRes = await conn.query(soqlLead);
     const lead = (leadRes.records || [])[0];
 
-    async function getOppUniversityRT() {
-      const r = await conn.query("SELECT Id FROM RecordType WHERE SobjectType='Opportunity' AND Name='University' LIMIT 1");
-      return r.records?.[0]?.Id || null;
-    }
-    async function getPersonAcctRT() {
-      const r = await conn.query("SELECT Id FROM RecordType WHERE SobjectType='Account' AND IsPersonType=true LIMIT 1");
-      return r.records?.[0]?.Id || null;
-    }
+    async function getOppUniversityRT(){ const r=await conn.query("SELECT Id FROM RecordType WHERE SobjectType='Opportunity' AND Name='University' LIMIT 1"); return r.records?.[0]?.Id||null; }
+    async function getPersonAcctRT(){ const r=await conn.query("SELECT Id FROM RecordType WHERE SobjectType='Account' AND IsPersonType=true LIMIT 1"); return r.records?.[0]?.Id||null; }
 
     if (lead) {
-      await conn.sobject('Lead').update({ Id: lead.Id, Is_Convert__c: true }, { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' }});
+      await conn.sobject('Lead').update({ Id: lead.Id, Is_Convert__c: true }, { headers:{'Sforce-Duplicate-Rule-Header':'allowSave=true'} });
       if (lead.ConvertedOpportunityId) {
         const opp = await conn.sobject('Opportunity').retrieve(lead.ConvertedOpportunityId);
         return res.status(200).json({ success:true, opportunityId: opp.Id, accountId: opp.AccountId });
@@ -71,12 +59,12 @@ module.exports = async (req, res) => {
       Name: `${firstName} ${lastName}/REG`,
       StageName: 'Booking Form',
       CloseDate: closeDate.toISOString().slice(0,10)
-    }, { headers: { 'Sforce-Duplicate-Rule-Header': 'allowSave=true' }});
+    }, { headers:{'Sforce-Duplicate-Rule-Header':'allowSave=true'} });
     if(!opp.success) throw new Error(opp.errors?.join(', ') || 'Gagal membuat Opportunity');
 
-    return res.status(200).json({ success:true, opportunityId: opp.id, accountId: acc.id });
+    res.status(200).json({ success:true, opportunityId: opp.id, accountId: acc.id });
   } catch (err) {
     console.error('register-lead-convert ERR:', err);
-    return res.status(500).json({ success:false, message: err.message || 'Gagal memproses' });
+    res.status(500).json({ success:false, message: err.message || 'Gagal memproses' });
   }
 };

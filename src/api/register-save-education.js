@@ -12,12 +12,10 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // Update Account: Master_School__c atau fallback ke field teks jika ada
     const accUpd = { Id: accountId };
     if (masterSchoolId) accUpd.Master_School__c = masterSchoolId; else accUpd.OtherSchool__c = schoolName;
     await conn.sobject('Account').update(accUpd);
 
-    // Update Opportunity: Graduation_Year__c
     await conn.sobject('Opportunity').update({ Id: opportunityId, Graduation_Year__c: graduationYear });
 
     return res.status(200).json({ success:true });

@@ -1,60 +1,44 @@
 const jsforce = require('jsforce');
-const multiparty = require('multiparty');
-
 const MAX_SIZE = 1024 * 1024;
 const ALLOWED = ['application/pdf','image/png','image/jpeg'];
 
+function extFromMime(m){ if(m==='application/pdf') return 'pdf'; if(m==='image/png') return 'png'; if(m==='image/jpeg') return 'jpg'; return 'bin'; }
+function safeTitle(prefix,id){ return `${prefix}-${id}-${new Date().toISOString().slice(0,10)}`; }
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
-
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
-  const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
 
   try {
-    const form = new multiparty.Form();
-    const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => err ? reject(err) : resolve({ fields, files }));
-    });
+    let oppId, accId, filename, mime, base64;
+    const ctype = req.headers['content-type'] || '';
 
-    const opportunityId = fields?.opportunityId?.[0];
-    const accountId = fields?.accountId?.[0];
-    const file = files?.proofFile?.[0] || files?.file?.[0];
-
-    if (!opportunityId || !accountId || !file) throw new Error('Data tidak lengkap');
-    if (file.size > MAX_SIZE) throw new Error('Ukuran file maksimal 1MB');
-    const ctype = file.headers?.['content-type'] || '';
-    if (ctype && !ALLOWED.includes(ctype)) throw new Error('Format file harus PDF/PNG/JPG');
-
-    await conn.login(SF_USERNAME, SF_PASSWORD);
-
-    const fs = require('fs'); const path = require('path');
-    const buff = fs.readFileSync(file.path); const base64 = buff.toString('base64');
-    const ext = path.extname(file.originalFilename || '').replace('.','').toLowerCase() || 'pdf';
-    const title = `BuktiBayar-${opportunityId}-${new Date().toISOString().slice(0,10)}`;
-
-    const cv = await conn.sobject('ContentVersion').create({
-      Title: title,
-      PathOnClient: `${title}.${ext}`,
-      VersionData: base64,
-      FirstPublishLocationId: opportunityId
-    });
-    if (!cv.success) throw new Error(cv.errors?.join(', ') || 'Gagal upload bukti');
-
-    const q = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cv.id}' LIMIT 1`);
-    const docId = q.records?.[0]?.ContentDocumentId;
-    if (docId) {
-      await conn.sobject('ContentDocumentLink').create({
-        ContentDocumentId: docId,
-        LinkedEntityId: accountId,
-        ShareType: 'V'
-      });
+    if (ctype.includes('application/json')) {
+      const body = await new Promise((resolve, reject) => { let raw=''; req.on('data',c=>raw+=c); req.on('end',()=>{ try{ resolve(JSON.parse(raw||'{}')); }catch(e){ reject(e);} }); });
+      oppId=body.opportunityId; accId=body.accountId; filename=body.filename||'bukti'; mime=body.mime||'application/octet-stream'; base64=body.data;
+      if(!oppId||!accId||!filename||!base64) throw new Error('Data tidak lengkap (JSON)');
+    } else {
+      return res.status(400).json({ success:false, message:'Unsupported Content-Type' });
     }
 
-    await conn.sobject('Opportunity').update({ Id: opportunityId, Is_Booking_Fee_Paid__c: true, StageName: 'Form Payment' });
+    const size=Buffer.from(base64,'base64').length; if(size>MAX_SIZE) throw new Error('Ukuran file maksimal 1MB');
+    if(mime && !ALLOWED.includes(mime)) throw new Error('Format file harus PDF/PNG/JPG');
 
-    return res.status(200).json({ success:true, contentVersionId: cv.id });
+    const conn=new jsforce.Connection({ loginUrl:SF_LOGIN_URL }); await conn.login(SF_USERNAME,SF_PASSWORD);
+
+    const title=safeTitle('BuktiBayar',oppId); const ext = (filename.split('.').pop()||extFromMime(mime)).toLowerCase();
+    const cv = await conn.sobject('ContentVersion').create({ Title:title, PathOnClient:`${title}.${ext}`, VersionData:base64, FirstPublishLocationId:oppId });
+    if(!cv.success) throw new Error(cv.errors?.join(', ') || 'Upload gagal');
+
+    const q = await conn.query(`SELECT ContentDocumentId FROM ContentVersion WHERE Id='${cv.id}' LIMIT 1`);
+    const docId=q.records?.[0]?.ContentDocumentId;
+    if(docId){ await conn.sobject('ContentDocumentLink').create({ ContentDocumentId:docId, LinkedEntityId:accId, ShareType:'V' }); }
+
+    await conn.sobject('Opportunity').update({ Id:oppId, Is_Booking_Fee_Paid__c:true, StageName:'Form Payment' });
+
+    res.status(200).json({ success:true, contentVersionId: cv.id });
   } catch (err) {
     console.error('register-upload-proof ERR:', err);
-    return res.status(500).json({ success:false, message: err.message || 'Upload gagal' });
+    res.status(500).json({ success:false, message: err.message || 'Upload gagal' });
   }
 };

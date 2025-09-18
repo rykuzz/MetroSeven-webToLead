@@ -13,10 +13,8 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // Stage -> Registration
     await conn.sobject('Opportunity').update({ Id: opportunityId, StageName: 'Registration' });
 
-    // Generate credentials
     const acc = await conn.sobject('Account').retrieve(accountId);
     const opp = await conn.sobject('Opportunity').retrieve(opportunityId);
 

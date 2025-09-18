@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "src/api/**/*.js": {
+      "runtime": "nodejs18.x",
+      "memory": 512,
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/src/api/$1" }
+  ]
+}

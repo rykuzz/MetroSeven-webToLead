@@ -1,120 +1,87 @@
 // src/js/register-options.js
-// Util untuk memuat dropdown di Step 3: Campus, Intake (Master Intake), Study Program (by Campus).
-
 (function () {
-  // ======= Konfigurasi selector (samakan dengan ID di register.html) =======
   const SEL = {
-    campus: '#campusSelect',     // <select id="campusSelect">
-    intake: '#intakeSelect',     // <select id="intakeSelect">
-    program: '#programSelect',   // <select id="programSelect">
-    campusError: '#campusError', // elemen kecil/label untuk pesan error campus (opsional)
+    campus: '#campusSelect',
+    intake: '#intakeSelect',
+    program: '#programSelect',
+    campusError: '#campusError'
   };
 
-  // ======= Utils fetch =======
+  // NOTE: gunakan .js karena di deploy kamu endpoint .js yang pasti hidup (lihat /api/ping.js)
+  const API = {
+    campus: '/api/salesforce-query.js?type=campus',
+    intake: '/api/salesforce-query.js?type=intake',
+    program: (campusId) => `/api/salesforce-query.js?type=program&campusId=${encodeURIComponent(campusId)}`
+  };
+
   async function fetchJSON(url) {
     const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    let payload = null;
+    try { payload = await r.clone().json(); } catch (_) {}
     if (!r.ok) {
-      let msg = '';
-      try { msg = (await r.json()).message || ''; } catch (_) { /* ignore */ }
-      throw new Error(msg || `HTTP ${r.status}`);
+      const msg = payload && payload.message ? payload.message : `HTTP ${r.status}`;
+      throw new Error(msg);
     }
-    return r.json();
+    return payload;
   }
 
-  function el(q) { return document.querySelector(q); }
-
-  function renderSelect(selectEl, placeholder, records, map = x => x) {
-    const list = (records || []).map(map);
-    selectEl.innerHTML = '';
+  function el(q){ return document.querySelector(q); }
+  function renderSelect(node, placeholder, rows, map = x => x){
+    node.innerHTML = '';
     const ph = document.createElement('option');
-    ph.value = '';
-    ph.textContent = placeholder;
-    selectEl.appendChild(ph);
-    for (const r of list) {
+    ph.value = ''; ph.textContent = placeholder;
+    node.appendChild(ph);
+    (rows || []).map(map).forEach(r => {
       const opt = document.createElement('option');
-      opt.value = r.value;
-      opt.textContent = r.label;
-      selectEl.appendChild(opt);
-    }
+      opt.value = r.value; opt.textContent = r.label;
+      node.appendChild(opt);
+    });
   }
+  function setError(q, msg){ const n = el(q); if (n) n.textContent = msg || ''; }
 
-  function showError(target, msg) {
-    const e = el(target);
-    if (e) e.textContent = msg || '';
-  }
-  function clearError(target) {
-    const e = el(target);
-    if (e) e.textContent = '';
-  }
-
-  // ======= Loaders =======
   async function loadCampus() {
-    const select = el(SEL.campus);
+    const node = el(SEL.campus);
     try {
-      const data = await fetchJSON('/api/salesforce-query?type=campus');
-      renderSelect(
-        select,
-        'Pilih campus',
-        data.records,
-        r => ({ value: r.Id, label: r.Name })
-      );
-      clearError(SEL.campusError);
-    } catch (err) {
-      console.error('loadCampus error:', err);
-      showError(SEL.campusError, 'Gagal memuat campus.');
-      // tetap render placeholder agar UI tidak kosong
-      renderSelect(select, 'Pilih campus', []);
+      const data = await fetchJSON(API.campus);
+      renderSelect(node, 'Pilih campus', data.records, r => ({ value: r.Id, label: r.Name }));
+      setError(SEL.campusError, '');
+    } catch (e) {
+      console.error('loadCampus', e);
+      setError(SEL.campusError, `Gagal memuat campus: ${e.message}`);
+      renderSelect(node, 'Pilih campus', []);
     }
   }
 
   async function loadIntakes() {
-    const select = el(SEL.intake);
+    const node = el(SEL.intake);
     try {
-      const data = await fetchJSON('/api/salesforce-query?type=intake');
-      renderSelect(
-        select,
-        'Pilih tahun ajaran',
-        data.records,
-        r => ({ value: r.Id, label: r.Name })
-      );
-    } catch (err) {
-      console.error('loadIntakes error:', err);
-      renderSelect(select, 'Pilih tahun ajaran', []);
+      const data = await fetchJSON(API.intake);
+      renderSelect(node, 'Pilih tahun ajaran', data.records, r => ({ value: r.Id, label: r.Name }));
+    } catch (e) {
+      console.error('loadIntakes', e);
+      renderSelect(node, 'Pilih tahun ajaran', []);
     }
   }
 
   async function loadProgramsByCampus(campusId) {
-    const select = el(SEL.program);
-    if (!campusId) {
-      renderSelect(select, 'Pilih program', []);
-      return;
-    }
+    const node = el(SEL.program);
     try {
-      const url = `/api/salesforce-query?type=program&campusId=${encodeURIComponent(campusId)}`;
-      const data = await fetchJSON(url);
-      renderSelect(
-        select,
-        'Pilih program',
-        data.records,
-        r => ({ value: r.Id, label: r.Name })
-      );
-    } catch (err) {
-      console.error('loadProgramsByCampus error:', err);
-      renderSelect(select, 'Pilih program', []);
+      if (!campusId) return renderSelect(node, 'Pilih program', []);
+      const data = await fetchJSON(API.program(campusId));
+      renderSelect(node, 'Pilih program', data.records, r => ({ value: r.Id, label: r.Name }));
+    } catch (e) {
+      console.error('loadProgramsByCampus', e);
+      renderSelect(node, 'Pilih program', []);
     }
   }
 
-  // ======= Init (dipanggil saat Step 3 tampil / DOM siap) =======
   async function initRegistrationOptions() {
     await Promise.all([loadCampus(), loadIntakes()]);
     const campusSelect = el(SEL.campus);
     if (campusSelect) {
-      campusSelect.addEventListener('change', (e) => {
-        loadProgramsByCampus(e.target.value);
-      });
+      campusSelect.addEventListener('change', (ev) => loadProgramsByCampus(ev.target.value));
     }
   }
 
-  // Ekspor ke window agar bisa dipanggil dari register-wizard.js
   window.__RegisterOptions = { initRegistrationOptions, loadProgramsByCampus };
 })();

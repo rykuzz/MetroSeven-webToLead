@@ -16,6 +16,7 @@
   "license": "MIT",
   "dependencies": {
     "jsforce": "^3.10.7"
+    "multiparty": "^4.2.3"
   },
   "devDependencies": {
     "live-server": "^1.2.1"

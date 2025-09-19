@@ -1,4 +1,4 @@
-// Wizard 5 langkah — TANPA localStorage
+// Wizard 5 langkah — TANPA localStorage (state di memori)
 (() => {
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -55,7 +55,7 @@
     return btoa(binary);
   }
 
-  // state di memori (bukan localStorage)
+  // state (bukan localStorage)
   const state = { oppId:'', accId:'', pemohon:{}, studi:{}, sekolah:{} };
 
   // ===== STEP 1: Data Pemohon =====
@@ -139,7 +139,6 @@
     sel.innerHTML='<option value="">Pilih tahun ajaran</option>';
     recs.forEach(x=> sel.innerHTML += `<option value="${x.Id}">${x.Name}</option>`);
   }
-  // >>> fungsi yang diperbaiki — selalu tampilkan Name
   async function loadPrograms(campusId,intakeId){
     const sel=$('#programSelect'); if(!sel) return;
     sel.innerHTML='<option value="">Memuat…</option>';
@@ -165,8 +164,6 @@
     const intakeId=$('#intakeSelect').value||'';
     if(campusId&&intakeId) await loadPrograms(campusId,intakeId);
   });
-  $('#btnBack3')?.addEventListener('click', ()=> setStep(2));
-
   $('#formStep3')?.addEventListener('submit', async (e)=>{
     e.preventDefault();
     const campusId=$('input[name="campus"]:checked')?.value||'';
@@ -193,74 +190,101 @@
     for(let y=now+5; y>=now-30; y--) sel.innerHTML += `<option value="${y}">${y}</option>`;
   }
 
-  function initSchoolAutocomplete(){
-    const input=$('#schoolInput');
-    const suggest=$('#schoolSuggest');
-    const manualToggle=$('#schoolManualToggle');
-    const manualBox=$('#schoolManualBox');
-    const hiddenId=$('#schoolId');
+  function initSchoolAutocomplete() {
+    const input = $('#schoolInput');
+    const suggest = $('#schoolSuggest');
+    const manualToggle = $('#schoolManualToggle');
+    const manualBox = $('#schoolManualBox');
+    const hidId = $('#schoolId');
 
-    const applyToggle=()=>{ const m=manualToggle.checked; manualBox.style.display=m?'grid':'none'; if(m){ hiddenId.value=''; suggest.style.display='none'; } };
-    manualToggle?.addEventListener('change', applyToggle); applyToggle();
+    const applyToggle = () => {
+      const m = manualToggle.checked;
+      manualBox.style.display = m ? 'grid' : 'none';
+      if (m) { hidId.value = ''; suggest.style.display = 'none'; }
+    };
+    manualToggle?.addEventListener('change', applyToggle);
+    applyToggle();
 
-    let timer=null;
-    input?.addEventListener('input', ()=>{
-      hiddenId.value=''; if((input.value||'').trim().length<2){ suggest.style.display='none'; suggest.innerHTML=''; return; }
-      clearTimeout(timer);
-      timer=setTimeout(async ()=>{
-        try{
-          const j=await api(`/api/register-options?type=sekolah&term=${encodeURIComponent((input.value||'').trim())}`);
-          const recs=j.records||[];
-          if(!recs.length){ suggest.innerHTML=''; suggest.style.display='none'; return; }
-          suggest.innerHTML = recs.map(r=>{
-            const npsn = r.NPSN__c ? `<span class="muted">• NPSN ${r.NPSN__c}</span>` : '';
-            return `<li class="s-item" data-id="${r.Id}" data-name="${(r.Name||'').replace(/"/g,'&quot;')}">${r.Name} ${npsn}</li>`;
-          }).join('');
-          suggest.style.display='block';
-        }catch{ suggest.innerHTML=''; suggest.style.display='none'; }
-      },300);
-    });
-    suggest?.addEventListener('click', (e)=>{
-      const li=e.target.closest('.s-item'); if(!li) return;
+    const runSearch = debounce(async () => {
+      const term = (input.value || '').trim();
+      if (term.length < 3) {
+        hidId.value = '';
+        suggest.innerHTML = '';
+        suggest.style.display = 'none';
+        return;
+      }
+      try {
+        const j = await api(`/api/register-options?type=sekolah&term=${encodeURIComponent(term)}`);
+        const recs = j.records || [];
+        if (!recs.length) { suggest.innerHTML = ''; suggest.style.display = 'none'; return; }
+        suggest.innerHTML = recs.map(r => {
+          const npsn = r.NPSN__c ? `<span class="muted">• NPSN ${r.NPSN__c}</span>` : '';
+          return `<li class="s-item" data-id="${r.Id}" data-name="${(r.Name||'').replace(/"/g,'&quot;')}">${r.Name} ${npsn}</li>`;
+        }).join('');
+        suggest.style.display = 'block';
+      } catch {
+        suggest.innerHTML = '';
+        suggest.style.display = 'none';
+      }
+    }, 300);
+
+    input?.addEventListener('input', () => { hidId.value = ''; runSearch(); });
+    input?.addEventListener('focus', runSearch);
+    suggest?.addEventListener('click', (e) => {
+      const li = e.target.closest('.s-item'); if (!li) return;
       input.value = li.dataset.name || '';
-      hiddenId.value = li.dataset.id || '';
-      suggest.style.display='none';
+      hidId.value = li.dataset.id || '';
+      suggest.style.display = 'none';
     });
-    document.addEventListener('click', (e)=>{ if(!suggest.contains(e.target) && e.target!==input) suggest.style.display='none'; });
+    document.addEventListener('click', (e) => {
+      if (!suggest.contains(e.target) && e.target !== input) suggest.style.display = 'none';
+    });
 
-    // submit
-    $('#formStep4')?.addEventListener('submit', async (e)=>{
+    $('#formStep4')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const schoolId=hiddenId.value.trim();
-      const manual=manualToggle.checked;
-      const manualName=$('#schoolNameManual').value.trim();
-      const manualNpsn=$('#npsnManual').value.trim();
-      const gradYear=$('#gradYearSelect').value;
-      const photo=$('#photoFile').files[0];
-      const msg=$('#msgStep4'); msg.style.display='none';
 
-      if(!manual && !schoolId){ msg.textContent='Pilih sekolah dari daftar atau centang isi manual.'; msg.style.display='block'; return; }
-      if(manual && !manualName){ msg.textContent='Isi nama sekolah manual.'; msg.style.display='block'; return; }
-      if(!gradYear){ msg.textContent='Pilih tahun lulus.'; msg.style.display='block'; return; }
-      if(!photo){ msg.textContent='Pilih pas foto.'; msg.style.display='block'; return; }
-      if(photo.size>1024*1024){ msg.textContent='Ukuran pas foto maksimal 1MB.'; msg.style.display='block'; return; }
+      const manual = manualToggle.checked;
+      const schoolId = hidId.value.trim();
+      const manualName = $('#schoolNameManual').value.trim();
+      const manualNpsn = $('#npsnManual').value.trim();
+      const gradYear = $('#gradYearSelect').value;
+      const photo = $('#photoFile').files[0];
+      const msg = $('#msgStep4'); msg.style.display = 'none';
 
-      try{
+      if (!gradYear) { msg.textContent = 'Pilih tahun lulus.'; msg.style.display = 'block'; return; }
+      if (!photo)   { msg.textContent = 'Pilih pas foto.';   msg.style.display = 'block'; return; }
+      if (photo.size > 1024 * 1024) { msg.textContent = 'Ukuran pas foto maksimal 1MB.'; msg.style.display = 'block'; return; }
+
+      if (!manual) {
+        if (!/^[a-zA-Z0-9]{15,18}$/.test(schoolId)) {
+          msg.textContent = 'Pilih sekolah dari daftar autocomplete.'; msg.style.display = 'block'; return;
+        }
+      } else {
+        if (!manualName) { msg.textContent = 'Isi nama sekolah manual.'; msg.style.display = 'block'; return; }
+        if (!/^\d+$/.test(manualNpsn)) { msg.textContent = 'Isi NPSN manual (hanya angka).'; msg.style.display = 'block'; return; }
+      }
+
+      try {
         showLoading('Menyimpan data sekolah & pas foto…');
+
+        const base = {
+          opportunityId: state.oppId,
+          accountId: state.accId,
+          graduationYear: gradYear
+        };
+        const payload = !manual
+          ? { ...base, masterSchoolId: schoolId }
+          : { ...base, draftSchool: manualName, draftNpsn: manualNpsn };
+
         await api('/api/register-save-education', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            opportunityId: state.oppId,
-            accountId: state.accId,
-            masterSchoolId: manual ? null : (schoolId || null),
-            draftSchoolName: manual ? manualName : null,
-            draftNpsn: manual ? digits(manualNpsn) : null,
-            graduationYear: gradYear
-          })
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
 
         await api('/api/register-upload-photo', {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             opportunityId: state.oppId,
             accountId: state.accId,
@@ -273,13 +297,19 @@
         state.sekolah = {
           mode: manual ? 'manual' : 'auto',
           schoolName: manual ? manualName : ($('#schoolInput').value || ''),
-          draftNpsn: manual ? digits(manualNpsn) : null,
+          draftNpsn: manual ? manualNpsn : null,
           gradYear,
           photoName: photo.name
         };
 
-        closeLoading(); toastOk('Data sekolah & pas foto tersimpan.'); buildReview(); setStep(5);
-      } catch (err) { closeLoading(); showError(err.message); }
+        closeLoading();
+        toastOk('Data sekolah & pas foto tersimpan.');
+        buildReview();
+        setStep(5);
+      } catch (err) {
+        closeLoading();
+        showError(err.message);
+      }
     });
   }
 
@@ -329,6 +359,6 @@
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // init (Step 3 dijalankan ketika masuk step tsb)
-  document.addEventListener('DOMContentLoaded', ()=> { /* noop */ });
+  // init
+  document.addEventListener('DOMContentLoaded', ()=>{ /* step 3 akan jalan saat masuk */ });
 })();

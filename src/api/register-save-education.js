@@ -1,59 +1,34 @@
-// src/api/register-save-education.js
+// Simpan sekolah ke Account (Master_School__c atau Draft_*), dan Graduation_Year__c ke Opportunity
 const jsforce = require('jsforce');
 
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success:false, message:'Method not allowed' });
-  }
-
+  if (req.method !== 'POST') return res.status(405).json({ success:false, message:'Method not allowed' });
   const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
   const conn = new jsforce.Connection({ loginUrl: SF_LOGIN_URL });
 
   try {
-    // Payload:
-    // - opportunityId (wajib)
-    // - accountId (wajib)
-    // - graduationYear (wajib)
-    // - masterSchoolId (opsional, kalau pilih dari lookup)
-    // - draftSchoolName, draftNpsn (opsional, kalau sekolah tidak ditemukan)
-    const {
-      opportunityId,
-      accountId,
-      masterSchoolId,
-      draftSchoolName,
-      draftNpsn,
-      graduationYear
-    } = req.body || {};
-
-    if (!opportunityId || !accountId || !graduationYear) {
-      throw new Error('Data tidak lengkap');
-    }
+    const { opportunityId, accountId, masterSchoolId, draftSchoolName, draftNpsn, graduationYear } = req.body || {};
+    if (!opportunityId || !accountId || !graduationYear) throw new Error('Data tidak lengkap');
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // Update Account (tanpa OtherSchool__c)
     const accUpd = { Id: accountId };
     if (masterSchoolId) {
       accUpd.Master_School__c = masterSchoolId;
       accUpd.Draft_Sekolah__c = null;
       accUpd.Draft_NPSN__c = null;
     } else {
-      if (!draftSchoolName) throw new Error('Nama sekolah (manual) wajib diisi');
       accUpd.Master_School__c = null;
       accUpd.Draft_Sekolah__c = draftSchoolName || null;
       accUpd.Draft_NPSN__c = draftNpsn || null;
     }
     await conn.sobject('Account').update(accUpd);
 
-    // Update Opportunity
-    await conn.sobject('Opportunity').update({
-      Id: opportunityId,
-      Graduation_Year__c: String(graduationYear)
-    });
+    await conn.sobject('Opportunity').update({ Id: opportunityId, Graduation_Year__c: graduationYear });
 
-    return res.status(200).json({ success:true });
+    res.status(200).json({ success:true });
   } catch (err) {
     console.error('register-save-education ERR:', err);
-    return res.status(500).json({ success:false, message: err.message || 'Gagal menyimpan data pendidikan' });
+    res.status(500).json({ success:false, message: err.message || 'Gagal menyimpan data pendidikan' });
   }
 };

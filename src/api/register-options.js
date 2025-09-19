@@ -29,52 +29,35 @@ module.exports = async (req, res) => {
       const searchTerm = (query.term ?? query.t ?? '').trim();
       const campusId   = (query.campusId ?? '').trim();
       const intakeId   = (query.intakeId ?? '').trim();
-      const dateStr    = (query.date ?? '').trim(); // for masterBatch (opsional)
+      const dateStr    = (query.date ?? '').trim(); // opsional utk masterBatch
       if (!type) return fail(400, 'type wajib diisi');
 
       // ---------- CAMPUSES ----------
       if (type === 'campuses' || type === 'campus') {
         const conn = await login();
-        try {
-          const r = await conn.query(`
-            SELECT Id, Name
-            FROM Campus__c
-            ${searchTerm ? `WHERE Name LIKE '%${esc(searchTerm)}%'` : ''}
-            ORDER BY Name
-            LIMIT 200
-          `);
-          res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-          return ok({ records: (r.records || []).map(x => ({ Id: x.Id, Name: x.Name })) });
-        } catch (e) {
-          return ok({ records: [], errors: [String(e && e.message || e)] });
-        }
+        const r = await conn.query(`
+          SELECT Id, Name
+          FROM Campus__c
+          ${searchTerm ? `WHERE Name LIKE '%${esc(searchTerm)}%'` : ''}
+          ORDER BY Name
+          LIMIT 200
+        `);
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+        return ok({ records: (r.records || []).map(x => ({ Id: x.Id, Name: x.Name })) });
       }
 
       // ---------- INTAKES ----------
       if (type === 'intakes' || type === 'intake') {
         const conn = await login();
-        try {
-          // kalau org-mu memang mengikat intake ke campus, pakai WHERE Campus__c;
-          // kalau tidak, hapus WHERE-nya
-          const r = await conn.query(`
-            SELECT Id, Name
-            FROM Master_Intake__c
-            ${campusId ? `WHERE Campus__c = '${esc(campusId)}'` : ''}
-            ORDER BY Name DESC
-            LIMIT 200
-          `);
-          res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-          return ok({ records: (r.records || []).map(x => ({ Id: x.Id, Name: x.Name })) });
-        } catch (e) {
-          // fallback aman (biar UI tetap hidup)
-          const now = new Date(); const y = now.getFullYear();
-          const fb = [];
-          for (let yr = y + 1; yr >= y - 5; yr--) {
-            const name = `${yr}/${yr + 1}`;
-            fb.push({ Id: name, Name: name });
-          }
-          return ok({ records: fb, fallback: 'dynamic-years', errors: [String(e && e.message || e)] });
-        }
+        const r = await conn.query(`
+          SELECT Id, Name
+          FROM Master_Intake__c
+          ${campusId ? `WHERE Campus__c = '${esc(campusId)}'` : ''}
+          ORDER BY Name DESC
+          LIMIT 200
+        `);
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+        return ok({ records: (r.records || []).map(x => ({ Id: x.Id, Name: x.Name })) });
       }
 
       // ---------- PROGRAMS (filter by Campus + Intake) ----------
@@ -83,76 +66,64 @@ module.exports = async (req, res) => {
         if (!intakeId) return fail(400, 'intakeId wajib diisi');
 
         const conn = await login();
-        const errors = [];
 
-        try {
-          // 1) Ambil Faculty_Campus__c di campus tsb
-          const fc = await conn.query(`
-            SELECT Id
-            FROM Faculty_Campus__c
-            WHERE Campus__c = '${esc(campusId)}'
-            LIMIT 500
-          `);
-          const fcIds = (fc.records || []).map(r => r.Id);
-          if (fcIds.length === 0) return ok({ records: [], source: 'no-faculty-campus' });
+        // 1) Ambil Faculty_Campus__c untuk campus tsb
+        const fc = await conn.query(`
+          SELECT Id
+          FROM Faculty_Campus__c
+          WHERE Campus__c = '${esc(campusId)}'
+          LIMIT 500
+        `);
+        const fcIds = (fc.records || []).map(r => r.Id);
+        if (fcIds.length === 0) return ok({ records: [], source: 'no-faculty-campus' });
 
-          const fcList = fcIds.map(id => `'${esc(id)}'`).join(',');
+        const fcList = fcIds.map(id => `'${esc(id)}'`).join(',');
 
-          // 2) Ambil Study_Program_Faculty_Campus__c yang:
-          //    - termasuk faculty-campus tsb
-          //    - TERKAIT intake terpilih via Study_Program_Intake__c
-          const spfc = await conn.query(`
-            SELECT Study_Program__r.Id, Study_Program__r.Name
-            FROM Study_Program_Faculty_Campus__c
-            WHERE Faculty_Campus__c IN (${fcList})
-              AND Id IN (
-                SELECT Study_Program_Faculty_Campus__c
-                FROM Study_Program_Intake__c
-                WHERE Master_Intake__c = '${esc(intakeId)}'
-              )
-            ORDER BY Study_Program__r.Name
-            LIMIT 500
-          `);
+        // 2) Ambil Study_Program_Faculty_Campus__c yang related ke intake via Study_Program_Intake__c
+        const spfc = await conn.query(`
+          SELECT Study_Program__r.Id, Study_Program__r.Name
+          FROM Study_Program_Faculty_Campus__c
+          WHERE Faculty_Campus__c IN (${fcList})
+            AND Id IN (
+              SELECT Study_Program_Faculty_Campus__c
+              FROM Study_Program_Intake__c
+              WHERE Master_Intake__c = '${esc(intakeId)}'
+            )
+          ORDER BY Study_Program__r.Name
+          LIMIT 500
+        `);
 
-          const rows = (spfc.records || [])
-            .map(r => ({
-              Id:   r.Study_Program__r?.Id || null,
-              Name: r.Study_Program__r?.Name || ''
-            }))
-            .filter(x => x.Id && x.Name);
+        const rows = (spfc.records || [])
+          .map(r => ({
+            Id:   r.Study_Program__r?.Id || null,
+            Name: r.Study_Program__r?.Name || ''
+          }))
+          .filter(x => x.Id && x.Name);
 
-          res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-          return ok({ records: rows, source: 'faculty+intake' });
-        } catch (e) {
-          errors.push(String(e && e.message || e));
-          return fail(500, 'Gagal query programs', { errors });
-        }
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+        return ok({ records: rows, source: 'faculty+intake' });
       }
 
-      // ---------- (Opsional) MASTER BATCH ----------
+      // ---------- (opsional) MASTER BATCH ----------
       if (type === 'masterBatch') {
         if (!intakeId) return fail(400, 'intakeId wajib diisi');
         if (!dateStr)  return fail(400, 'date wajib diisi (YYYY-MM-DD)');
         const conn = await login();
 
-        try {
-          const r = await conn.query(`
-            SELECT Id, Name, Batch_Start_Date__c, Batch_End_Date__c
-            FROM Master_Batches__c
-            WHERE Intake__c = '${esc(intakeId)}'
-              AND Batch_Start_Date__c <= ${dateStr ? `'${esc(dateStr)}'` : 'TODAY'}
-              AND Batch_End_Date__c   >= ${dateStr ? `'${esc(dateStr)}'` : 'TODAY'}
-            ORDER BY Batch_Start_Date__c DESC
-            LIMIT 1
-          `);
-          const rec = (r.records || [])[0];
-          return ok({ id: rec?.Id || null, name: rec?.Name || null });
-        } catch (e) {
-          return fail(500, 'Gagal query Master_Batches__c', { error: String(e && e.message || e) });
-        }
+        const r = await conn.query(`
+          SELECT Id, Name, Batch_Start_Date__c, Batch_End_Date__c
+          FROM Master_Batches__c
+          WHERE Intake__c = '${esc(intakeId)}'
+            AND Batch_Start_Date__c <= '${esc(dateStr)}'
+            AND Batch_End_Date__c   >= '${esc(dateStr)}'
+          ORDER BY Batch_Start_Date__c DESC
+          LIMIT 1
+        `);
+        const rec = (r.records || [])[0];
+        return ok({ id: rec?.Id || null, name: rec?.Name || null });
       }
 
-      // ---------- (Opsional) BSP ECHO ----------
+      // ---------- (opsional) BSP echo ----------
       if (type === 'bsp') {
         const masterBatchId = (query.masterBatchId || '').trim();
         const studyProgramId = (query.studyProgramId || '').trim();
@@ -196,7 +167,7 @@ module.exports = async (req, res) => {
         return ok({ records: rows });
       }
 
-      // ---------- SCHOOLS (fallback lebih luas) ----------
+      // ---------- SCHOOLS (fallback luas) ----------
       if (type === 'schools' || type === 'school') {
         const conn = await login();
         const errors = [];
@@ -256,7 +227,7 @@ module.exports = async (req, res) => {
     if (method === 'POST') {
       const conn = await login();
 
-      // Simpan preferensi studi (Stage ditangani proses lain)
+      // Simpan preferensi studi (alias saveReg/saveStudy)
       if (body?.action === 'saveReg' || body?.action === 'saveStudy') {
         const opportunityId = body.opportunityId;
         const campusId  = body.campusId;

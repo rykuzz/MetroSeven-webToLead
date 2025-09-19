@@ -42,11 +42,11 @@
     get acc() { return localStorage.getItem(K('acc')) || ''; },
     set acc(v) { localStorage.setItem(K('acc'), v || ''); },
     set pemohon(o){ localStorage.setItem(K('pemohon'), JSON.stringify(o||{})); },
-    get pemohon(){ try{ return JSON.parse(localStorage.getItem(K('pemohon'))||'{}'); }catch{ return {}; } },
+    get pemohon(){ try{ return JSON.parse(localStorage.getItem(K('pemohon')))||{}; }catch{ return {}; } },
     set reg(o){ localStorage.setItem(K('reg'), JSON.stringify(o||{})); },
-    get reg(){ try{ return JSON.parse(localStorage.getItem(K('reg'))||'{}'); }catch{ return {}; } },
+    get reg(){ try{ return JSON.parse(localStorage.getItem(K('reg')))||{}; }catch{ return {}; } },
     set sekolah(o){ localStorage.setItem(K('sekolah'), JSON.stringify(o||{})); },
-    get sekolah(){ try{ return JSON.parse(localStorage.getItem(K('sekolah'))||'{}'); }catch{ return {}; } },
+    get sekolah(){ try{ return JSON.parse(localStorage.getItem(K('sekolah')))||{}; }catch{ return {}; } },
   };
 
   // === UI helpers
@@ -217,7 +217,7 @@
       closeLoading(); toastOk('Preferensi studi tersimpan.');
       setStep(4);
       populateYears();
-      attachSchoolAutocomplete();
+      attachSchoolAutocomplete(); // panggil autocomplete saat masuk Step 4
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
@@ -233,9 +233,9 @@
     for(let y=now;y<=max;y++) sel.innerHTML+=`<option value="${y}">${y}</option>`;
   }
 
-  // Autocomplete sekolah menggunakan <datalist>
+  // Autocomplete sekolah menggunakan <datalist> + endpoint type=schools&term=...
   function attachSchoolAutocomplete(){
-    const input = $('#schoolInput');
+    const input  = $('#schoolInput');
     const hidden = $('#schoolId');
     if (!input || !hidden) return;
 
@@ -246,24 +246,22 @@
       list.id = 'schoolList';
       document.body.appendChild(list);
     }
-    input.setAttribute('list','schoolList');
+    input.setAttribute('list', 'schoolList');
 
     let timer = null;
-    let last = []; // simpan hasil terakhir {Id, Name, NPSN}
+    let last = []; // cache hasil terakhir [{Id, Name, NPSN}]
 
-    function buildLabel(r){
-      return r.NPSN ? `${r.Name} (${r.NPSN})` : r.Name;
-    }
+    const labelOf = (r) => r.NPSN ? `${r.Name} (${r.NPSN})` : r.Name;
 
     async function search(term){
       if (!term || term.length < 2) { list.innerHTML=''; last=[]; hidden.value=''; return; }
       try{
-        // versi API kamu
-        const res = await fetch(`/api/register-options?type=sekolah&t=${encodeURIComponent(term)}`);
+        // PAKAI endpoint yang sudah terbukti OK
+        const res = await fetch(`/api/register-options?type=schools&term=${encodeURIComponent(term)}`);
         const data = await res.json();
-        const recs = (data.records || []).map(r => ({ Id:r.Id, Name:r.Name, NPSN:r.NPSN__c || r.NPSN || null }));
+        const recs = (data.records || []).map(r => ({ Id:r.Id, Name:r.Name, NPSN:r.NPSN || null }));
         last = recs;
-        list.innerHTML = recs.map(r => `<option value="${buildLabel(r)}"></option>`).join('');
+        list.innerHTML = recs.map(r => `<option value="${labelOf(r)}"></option>`).join('');
       }catch{
         list.innerHTML=''; last=[]; hidden.value='';
       }
@@ -271,7 +269,7 @@
 
     // Ketik: cari (debounce)
     input.addEventListener('input', ()=>{
-      hidden.value='';
+      hidden.value = '';
       clearTimeout(timer);
       timer = setTimeout(()=> search(input.value.trim()), 250);
     });
@@ -279,7 +277,7 @@
     // Saat user memilih salah satu item
     input.addEventListener('change', ()=>{
       const val = input.value.trim();
-      const hit = last.find(r => buildLabel(r) === val) || last.find(r => r.Name === val);
+      const hit = last.find(r => labelOf(r) === val) || last.find(r => r.Name === val);
       hidden.value = hit ? hit.Id : '';
     });
   }

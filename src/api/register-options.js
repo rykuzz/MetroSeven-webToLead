@@ -36,7 +36,7 @@ module.exports = async (req, res) => {
           const r = await conn.query(`
             SELECT Id, Name
             FROM Campus__c
-            ${term ? WHERE Name LIKE '%${esc(term)}%' : ''}
+            ${term ? `WHERE Name LIKE '%${esc(term)}%'` : ''}
             ORDER BY Name
             LIMIT 200
           `);
@@ -53,12 +53,15 @@ module.exports = async (req, res) => {
             SELECT Master_School__c
             FROM Account
             WHERE Master_School__c != null
-              ${term ? AND Master_School__c LIKE '%${esc(term)}%' : ''}
+              ${term ? `AND Master_School__c LIKE '%${esc(term)}%'` : ''}
             GROUP BY Master_School__c
             ORDER BY Master_School__c
             LIMIT 200
           `);
-          const rows = (r2.records || []).map(x => ({ Id: x.Master_School_c, Name: x.Master_School_c }));
+          const rows = (r2.records || []).map(x => ({
+            Id: x.Master_School__c,
+            Name: x.Master_School__c
+          }));
           return ok({ success: true, records: rows, fallback: 'Account.Master_School__c' });
         }
       }
@@ -70,7 +73,7 @@ module.exports = async (req, res) => {
           const r = await conn.query(`
             SELECT Id, Name
             FROM Master_Intake__c
-            ${campusId ? WHERE Campus__c = '${esc(campusId)}' : ''}
+            ${campusId ? `WHERE Campus__c = '${esc(campusId)}'` : ''}
             ORDER BY Name DESC
             LIMIT 200
           `);
@@ -81,7 +84,7 @@ module.exports = async (req, res) => {
           const now = new Date(); const y = now.getFullYear();
           const fallback = [];
           for (let yr = y + 1; yr >= y - 5; yr--) {
-            const name = ${yr}/${yr + 1};
+            const name = `${yr}/${yr + 1}`;
             fallback.push({ Id: name, Name: name });
           }
           return ok({ success: true, records: fallback, fallback: 'dynamic-years', errors: [String(e && e.message || e)] });
@@ -95,22 +98,29 @@ module.exports = async (req, res) => {
         const errors = [];
         let rows = null;
 
+        // Try 1: junction Study_Program_Intake__c
         try {
-          const campusFilter = campusId ? AND (Study_Program__r.Campus__c = '${esc(campusId)}') : '';
+          const campusFilter = campusId ? `AND (Study_Program__r.Campus__c = '${esc(campusId)}')` : '';
           const q1 = await conn.query(`
-            SELECT Study_Program_c, Study_Program_r.Name
+            SELECT Study_Program__c, Study_Program__r.Name
             FROM Study_Program_Intake__c
             WHERE Master_Intake__c = '${esc(intakeId)}'
               ${campusFilter}
             ORDER BY Study_Program__r.Name
             LIMIT 500
           `);
-          if (q1.totalSize > 0) rows = q1.records.map(r => ({ Id: r.Study_Program_c, Name: r.Study_Program_r?.Name }));
+          if (q1.totalSize > 0) {
+            rows = q1.records.map(r => ({
+              Id: r.Study_Program__c,
+              Name: r.Study_Program__r?.Name
+            }));
+          }
         } catch (e) { errors.push('SPI__c: ' + (e.message || String(e))); }
 
+        // Try 2: Study_Program__c lookup Master_Intake__c
         if (!rows || rows.length === 0) {
           try {
-            const campusFilter = campusId ? AND Campus__c = '${esc(campusId)}' : '';
+            const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
             const q2 = await conn.query(`
               SELECT Id, Name
               FROM Study_Program__c
@@ -123,6 +133,7 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.Master_Intake__c: ' + (e.message || String(e))); }
         }
 
+        // Try 3: fallback by campus
         if ((!rows || rows.length === 0) && campusId) {
           try {
             const q4 = await conn.query(`
@@ -150,7 +161,7 @@ module.exports = async (req, res) => {
         const r = await conn.query(`
           SELECT Id, Name
           FROM Master_School__c
-          ${term ? WHERE Name LIKE '%${esc(term)}%' : ''}
+          ${term ? `WHERE Name LIKE '%${esc(term)}%'` : ''}
           ORDER BY Name
           LIMIT 50
         `);
@@ -173,7 +184,7 @@ module.exports = async (req, res) => {
         await conn.sobject('Opportunity').update({
           Id: opportunityId,
           Campus__c: campusId,
-          Master_Intake__c: intakeId,
+          Master_Intake__c: intakeId,   // <- sesuai field di org kamu
           Study_Program__c: studyProgramId
         });
 
@@ -186,5 +197,5 @@ module.exports = async (req, res) => {
     return fail(405, 'Method not allowed');
   } catch (err) {
     return fail(500, err.message || 'Gagal memproses request');
-  }
+  }
 };

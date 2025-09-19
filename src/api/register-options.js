@@ -1,15 +1,19 @@
 // Wizard options: campuses, intakes, programs, sekolah (autocomplete)
-// Jawaban diseragamkan untuk programs: selalu { Id, Name }
+// Output untuk "programs" diseragamkan: SELALU { Id, Name }
 
 const jsforce = require('jsforce');
 
 // escape sederhana untuk SOQL
 const esc = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-const ok   = (res, data) => res.status(200).json({ success: true, ...data });
+
+const ok = (res, data) =>
+  res.status(200).json({ success: true, ...data });
+
 const fail = (res, code, message, extra = {}) =>
   res.status(code).json({ success: false, message, ...extra });
 
-async function login({ SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD }) {
+async function login(env) {
+  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = env;
   if (!SF_LOGIN_URL || !SF_USERNAME || !SF_PASSWORD) {
     throw new Error('ENV Salesforce belum lengkap (SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD)');
   }
@@ -19,7 +23,12 @@ async function login({ SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD }) {
 }
 
 module.exports = async (req, res) => {
-  const { SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD } = process.env;
+  const env = {
+    SF_LOGIN_URL: process.env.SF_LOGIN_URL,
+    SF_USERNAME: process.env.SF_USERNAME,
+    SF_PASSWORD: process.env.SF_PASSWORD,
+  };
+
   const { method, query, body } = req;
 
   try {
@@ -34,7 +43,7 @@ module.exports = async (req, res) => {
 
       // ---------- CAMPUSES ----------
       if (type === 'campuses' || type === 'campus') {
-        const conn = await login({ SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD });
+        const conn = await login(env);
         const r = await conn.query(`
           SELECT Id, Name
           FROM Campus__c
@@ -48,7 +57,7 @@ module.exports = async (req, res) => {
 
       // ---------- INTAKES ----------
       if (type === 'intakes' || type === 'intake') {
-        const conn = await login({ SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD });
+        const conn = await login(env);
         const r = await conn.query(`
           SELECT Id, Name
           FROM Master_Intake__c
@@ -61,14 +70,13 @@ module.exports = async (req, res) => {
       }
 
       // ---------- PROGRAMS (by Campus + Intake) ----------
-      // SERAGAMKAN output: selalu { Id, Name }
+      // SERAGAMKAN output: { Id, Name }
       if (type === 'programs' || type === 'program') {
         if (!campusId) return fail(res, 400, 'campusId wajib diisi');
         if (!intakeId) return fail(res, 400, 'intakeId wajib diisi');
 
-        const conn = await login({ SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD });
+        const conn = await login(env);
 
-        // Menggunakan junction Study_Program_Intake__c
         const q = await conn.query(`
           SELECT Study_Program__r.Id, Study_Program__r.Name
           FROM Study_Program_Intake__c
@@ -80,8 +88,8 @@ module.exports = async (req, res) => {
 
         const rows = (q.records || [])
           .map(r => ({
-            Id: r.Study_Program__r?.Id,
-            Name: r.Study_Program__r?.Name
+            Id:   r.Study_Program__r?.Id,
+            Name: r.Study_Program__r?.Name,
           }))
           .filter(x => x.Id && x.Name);
 
@@ -91,10 +99,10 @@ module.exports = async (req, res) => {
 
       // ---------- SEKOLAH (autocomplete) ----------
       if (type === 'sekolah') {
-        const conn = await login({ SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD });
+        const conn = await login(env);
         if (searchTerm.length < 2) return fail(res, 400, 'Kata kunci terlalu pendek');
 
-        // Coba ke 2 kemungkinan nama objek master sekolah
+        // Coba dua nama objek master sekolah (beda org bisa beda)
         let rows = [];
         try {
           const q1 = await conn.query(`
@@ -129,16 +137,15 @@ module.exports = async (req, res) => {
 
     // =================== POST ===================
     if (method === 'POST') {
-      const conn = await login({ SF_LOGIN_URL, SF_USERNAME, SF_PASSWORD });
+      const conn = await login(env);
 
-      // Simpan pilihan studi → ke Opportunity
+      // Simpan Preferensi Studi
       if (body?.action === 'saveStudy') {
         const { opportunityId, campusId, intakeId, programId } = body || {};
         if (!opportunityId || !campusId || !intakeId || !programId) {
           return fail(res, 400, 'Param kurang (opportunityId, campusId, intakeId, programId)');
         }
 
-        // update basic fields
         await conn.sobject('Opportunity').update({
           Id: opportunityId,
           Campus__c: campusId,
@@ -146,13 +153,13 @@ module.exports = async (req, res) => {
           Study_Program__c: programId
         });
 
-        // update Name → "First Last/REG/{Program Name}"
+        // Update Name → "First Last/REG/{ProgramName}"
         const [opp, prog] = await Promise.all([
           conn.sobject('Opportunity').retrieve(opportunityId),
           conn.sobject('Study_Program__c').retrieve(programId)
         ]);
         const baseName = (opp.Name || '').split('/REG')[0] + '/REG';
-        const newName  = `${baseName}/${prog.Name}`;
+        const newName = `${baseName}/${prog.Name}`;
         await conn.sobject('Opportunity').update({ Id: opportunityId, Name: newName });
 
         return ok(res, {});

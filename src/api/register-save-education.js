@@ -31,7 +31,7 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
-    // Update Account
+    // Update Account (tanpa OtherSchool__c)
     const accUpd = { Id: accountId };
     if (masterSchoolId) {
       accUpd.Master_School__c = masterSchoolId;

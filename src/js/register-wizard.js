@@ -157,7 +157,15 @@
   });
 
   // === STEP 4
-  function populateYears(){ const sel=$('#gradYearSelect'); const now=new Date().getFullYear(); sel.innerHTML='<option value="">Pilih tahun</option>'; for(let y=now+5;y>=now-30;y--) sel.innerHTML+=`<option value="${y}">${y}</option>`; }
+  function populateYears(){
+  const sel = $('#gradYearSelect');
+  const now = new Date().getFullYear();
+  const max = now + 5;         // ke atas 5 tahun (ubah sesuai kebutuhan)
+  sel.innerHTML = '<option value="">Pilih tahun</option>';
+  for (let y = now; y <= max; y++) {   // urut naik
+    sel.innerHTML += `<option value="${y}">${y}</option>`;
+    }
+  }
   $('#btnBack4').addEventListener('click', ()=> setStep(3));
   $('#formStep4').addEventListener('submit', async (e)=>{
     e.preventDefault();
@@ -213,3 +221,4 @@
   // init
   document.addEventListener('DOMContentLoaded', ()=>{ /* init opsional */ });
 })();
+

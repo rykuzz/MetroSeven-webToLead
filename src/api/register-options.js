@@ -45,7 +45,7 @@ module.exports = async (req, res) => {
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
           return ok({ success: true, records: r.records });
         } catch (e) {
-          // fallback pakai Account.Master_School__c jika object Campus__c tidak ada
+          // fallback: Account.Master_School__c (kalau object Campus__c tidak ada)
           const msg = String(e && e.message || e);
           const fallbackable = /INVALID_TYPE|No such column|is not supported/i.test(msg);
           if (!fallbackable) return ok({ success: true, records: [], errors: [msg], source: 'campuses:err' });
@@ -89,7 +89,7 @@ module.exports = async (req, res) => {
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
           return ok({ success: true, records: r.records.map(x => ({ Id: x.Id, Name: x.Name })) });
         } catch (e) {
-          // fallback dinamis agar UI tetap hidup
+          // fallback dinamis agar UI tetap jalan
           const now = new Date(); const y = now.getFullYear();
           const fallback = [];
           for (let yr = y + 1; yr >= y - 5; yr--) {
@@ -100,8 +100,7 @@ module.exports = async (req, res) => {
         }
       }
 
-      // ---------- PROGRAMS ----------
-      // WAJIB berdasarkan intakeId
+      // ---------- PROGRAMS (berdasarkan intake) ----------
       if (type === 'programs' || type === 'program') {
         if (!intakeId) return fail(400, 'intakeId wajib diisi');
         const conn = await login();
@@ -140,7 +139,7 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.Master_Intake__c: ' + (e.message || String(e))); }
         }
 
-        // Try 3: fallback by campus (kalau skema kamu tidak punya relasi ke intake)
+        // Try 3: fallback by campus (kalau skema tidak punya relasi ke intake)
         if ((!rows || rows.length === 0) && campusId) {
           try {
             const soql3 = `
@@ -163,7 +162,7 @@ module.exports = async (req, res) => {
         });
       }
 
-      // ---------- SCHOOLS (umum): type=schools|school, param term ----------
+      // ---------- SCHOOLS (autocomplete) ----------
       if (type === 'schools' || type === 'school') {
         const conn = await login();
         const errors = [];

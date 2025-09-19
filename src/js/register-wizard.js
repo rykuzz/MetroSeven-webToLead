@@ -14,7 +14,6 @@
     return '+' + p;
   };
 
-  // Safe API: coba parse JSON; kalau non-JSON tampilkan text-nya
   async function api(url, opts) {
     const res = await fetch(url, opts);
     let data = null;
@@ -128,10 +127,10 @@
     sel.innerHTML='<option value="">Pilih tahun ajaran</option>'; recs.forEach(x=> sel.innerHTML += `<option value="${x.Id}">${x.Name}</option>`);
   }
   async function loadPrograms(campusId,intakeId){
-    const sel=$('#programSelect'); 
+    const sel=$('#programSelect');
     if(!intakeId){ sel.innerHTML='<option value="">Pilih intake terlebih dahulu</option>'; return; }
     sel.innerHTML='<option value="">Memuat…</option>';
-    const j=await api(`/api/register-options?type=programs&intakeId=${encodeURIComponent(intakeId)}${campusId?`&campusId=${encodeURIComponent(campusId)}`:''}`); 
+    const j=await api(`/api/register-options?type=programs&intakeId=${encodeURIComponent(intakeId)}${campusId?`&campusId=${encodeURIComponent(campusId)}`:''}`);
     const recs=j.records||[];
     if(!recs.length){ sel.innerHTML='<option value="">Program belum tersedia untuk kombinasi ini</option>'; return; }
     sel.innerHTML='<option value="">Pilih program</option>'; recs.forEach(x=> sel.innerHTML+=`<option value="${x.Id}">${x.Name}</option>`);
@@ -152,97 +151,157 @@
       showLoading('Menyimpan pilihan program…');
       await api('/api/register-options',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'saveReg', opportunityId:S.opp, campusId, intakeId, studyProgramId:programId })});
       S.reg={ campusId,intakeId,programId };
-      closeLoading(); toastOk('Preferensi studi tersimpan.'); setStep(4); populateYears();
+      closeLoading(); toastOk('Preferensi studi tersimpan.'); setStep(4); populateYears(); attachSchoolAutocomplete();
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
   // === STEP 4
   function populateYears(){
-  const sel = $('#gradYearSelect');
-  const now = new Date().getFullYear();
-  const max = now + 5;
-  sel.innerHTML = '<option value="">Pilih tahun</option>';
-  for (let y = now; y <= max; y++) {
-    sel.innerHTML += `<option value="${y}">${y}</option>`;
-  }
-}
-
-// — Autocomplete sekolah
-function attachSchoolAutocomplete(){
-  const input = $('#schoolInput');
-  const hidden = $('#schoolId');
-
-  // container dropdown
-  let box = document.createElement('div');
-  box.id = 'schoolSuggestBox';
-  box.style.position = 'absolute';
-  box.style.zIndex = '9999';
-  box.style.background = '#fff';
-  box.style.border = '1px solid #ddd';
-  box.style.borderRadius = '8px';
-  box.style.boxShadow = '0 8px 24px rgba(0,0,0,.12)';
-  box.style.padding = '4px 0';
-  box.style.display = 'none';
-  document.body.appendChild(box);
-
-  function placeBox() {
-    const r = input.getBoundingClientRect();
-    box.style.left = `${window.scrollX + r.left}px`;
-    box.style.top = `${window.scrollY + r.bottom + 4}px`;
-    box.style.width = `${r.width}px`;
+    const sel=$('#gradYearSelect');
+    const now=new Date().getFullYear();
+    const max=now+5;
+    sel.innerHTML='<option value="">Pilih tahun</option>';
+    for(let y=now;y<=max;y++) sel.innerHTML+=`<option value="${y}">${y}</option>`;
   }
 
-  function show(items){
-    if (!items || !items.length) { box.style.display = 'none'; return; }
-    placeBox();
-    box.innerHTML = '';
-    items.forEach(it => {
-      const div = document.createElement('div');
-      div.style.padding = '8px 12px';
-      div.style.cursor = 'pointer';
-      div.onmouseenter = () => div.style.background = '#f6f6f6';
-      div.onmouseleave = () => div.style.background = 'transparent';
-      const label = it.NPSN ? `${it.Name} (${it.NPSN})` : it.Name;
-      div.textContent = label;
-      div.addEventListener('click', () => {
-        input.value = label;
-        hidden.value = it.Id;
-        box.style.display = 'none';
+  function attachSchoolAutocomplete(){
+    const input = $('#schoolInput');
+    const hidden = $('#schoolId');
+    if (!input) return;
+
+    // dropdown element
+    let box = document.getElementById('schoolSuggestBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'schoolSuggestBox';
+      box.style.position = 'absolute';
+      box.style.zIndex = '9999';
+      box.style.background = '#fff';
+      box.style.border = '1px solid #e5e7eb';
+      box.style.borderRadius = '8px';
+      box.style.boxShadow = '0 8px 24px rgba(0,0,0,.12)';
+      box.style.padding = '4px 0';
+      box.style.display = 'none';
+      document.body.appendChild(box);
+    }
+
+    function placeBox() {
+      const r = input.getBoundingClientRect();
+      box.style.left = `${window.scrollX + r.left}px`;
+      box.style.top = `${window.scrollY + r.bottom + 4}px`;
+      box.style.width = `${r.width}px`;
+    }
+
+    function show(items){
+      if (!items || !items.length) { box.style.display = 'none'; return; }
+      placeBox();
+      box.innerHTML = '';
+      items.forEach(it => {
+        const div = document.createElement('div');
+        div.style.padding = '8px 12px';
+        div.style.cursor = 'pointer';
+        div.onmouseenter = () => div.style.background = '#f6f6f6';
+        div.onmouseleave = () => div.style.background = 'transparent';
+        const label = it.NPSN ? `${it.Name} (${it.NPSN})` : it.Name;
+        div.textContent = label;
+        div.addEventListener('click', () => {
+          input.value = label;
+          hidden.value = it.Id;
+          box.style.display = 'none';
+        });
+        box.appendChild(div);
       });
-      box.appendChild(div);
+      box.style.display = 'block';
+    }
+
+    let timer = null;
+    async function search(term){
+      if (!term || term.length < 2) { show([]); return; }
+      try{
+        // versi kamu: type=sekolah&t=...
+        const res = await fetch(`/api/register-options?type=sekolah&t=${encodeURIComponent(term)}`);
+        const data = await res.json();
+        const recs = (data.records || []).map(r => ({ Id:r.Id, Name:r.Name, NPSN:r.NPSN__c || r.NPSN || null }));
+        show(recs);
+      }catch{ show([]); }
+    }
+
+    input.addEventListener('input', () => {
+      hidden.value = '';
+      clearTimeout(timer);
+      timer = setTimeout(() => search(input.value.trim()), 250);
     });
-    box.style.display = 'block';
+
+    window.addEventListener('resize', placeBox);
+    window.addEventListener('scroll', placeBox, true);
+    input.addEventListener('focus', placeBox);
+    document.addEventListener('click', (e)=>{
+      if (e.target !== input && !box.contains(e.target)) box.style.display = 'none';
+    });
   }
 
-  let timer = null;
-  async function search(term){
-    if (!term || term.length < 2) { show([]); return; }
+  $('#btnBack4').addEventListener('click', ()=> setStep(3));
+  $('#formStep4').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const oppId=S.opp, accId=S.acc;
+    const schoolId=$('#schoolId').value.trim();
+    const schoolName=$('#schoolInput').value.trim();
+    const gradYear=$('#gradYearSelect').value;
+    const photo=$('#photoFile').files[0];
+    const msg=$('#msgStep4'); msg.style.display='none';
+    if(!schoolName){ msg.textContent='Isi sekolah asal.'; msg.style.display='block'; return; }
+    if(!gradYear){ msg.textContent='Pilih tahun lulus.'; msg.style.display='block'; return; }
+    if(!photo){ msg.textContent='Pilih pas foto.'; msg.style.display='block'; return; }
+    if(photo.size>1024*1024){ msg.textContent='Ukuran pas foto maksimal 1MB.'; msg.style.display='block'; return; }
+
     try{
-      const res = await fetch(`/api/register-options?type=schools&term=${encodeURIComponent(term)}`);
-      const data = await res.json();
-      show((data.records || []).map(r => ({ Id:r.Id, Name:r.Name, NPSN:r.NPSN || null })));
-    }catch{ show([]); }
-  }
-
-  input.addEventListener('input', () => {
-    hidden.value = '';
-    clearTimeout(timer);
-    timer = setTimeout(() => search(input.value.trim()), 250);
+      showLoading('Menyimpan data sekolah & pas foto…');
+      await api('/api/register-save-education',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ opportunityId:oppId, accountId:accId, masterSchoolId:schoolId||null, schoolName, graduationYear:gradYear })});
+      const payload2={ opportunityId:oppId, accountId:accId, filename:photo.name, mime:photo.type||'image/jpeg', data:await fileToBase64(photo) };
+      await api('/api/register-upload-photo',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload2) });
+      S.sekolah={ schoolId, schoolName, gradYear, photoName:photo.name };
+      closeLoading(); toastOk('Data sekolah & pas foto tersimpan.'); buildReview(); setStep(5);
+    }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  window.addEventListener('resize', placeBox);
-  window.addEventListener('scroll', placeBox, true);
-  input.addEventListener('focus', placeBox);
-  document.addEventListener('click', (e)=>{
-    if (e.target !== input && !box.contains(e.target)) box.style.display = 'none';
-  });
-}
-
-document.addEventListener('DOMContentLoaded', ()=>{
-  // panggil ini saat masuk Step 4
-  if (document.querySelector('[data-step="4"]')) {
-    populateYears();
-    attachSchoolAutocomplete();
+  // === STEP 5
+  $('#btnBack5').addEventListener('click', ()=> setStep(4));
+  function buildReview(){
+    const p=S.pemohon, r=S.reg, s=S.sekolah;
+    $('#reviewBox').innerHTML = `
+      <div class="review-section"><h4>Data Pemohon</h4>
+        <div><b>Nama:</b> ${p.firstName} ${p.lastName}</div>
+        <div><b>Email:</b> ${p.email}</div>
+        <div><b>Phone:</b> ${p.phone}</div>
+      </div>
+      <div class="review-section"><h4>Preferensi Studi</h4>
+        <div><b>Campus ID:</b> ${r.campusId}</div>
+        <div><b>Intake ID:</b> ${r.intakeId}</div>
+        <div><b>Program ID:</b> ${r.programId}</div>
+      </div>
+      <div class="review-section"><h4>Data Sekolah</h4>
+        <div><b>Sekolah Asal:</b> ${s.schoolName}</div>
+        <div><b>Tahun Lulus:</b> ${s.gradYear}</div>
+        <div><b>Pas Foto:</b> ${s.photoName}</div>
+      </div>
+      <div class="hint">Saat Submit: Stage Opportunity → <b>Registration</b> & credentials ditampilkan sekali.</div>`;
   }
-});
+  $('#btnSubmitFinal').addEventListener('click', async ()=>{
+    try{
+      showLoading('Menyelesaikan registrasi…');
+      const j = await api('/api/register-finalize',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ opportunityId:S.opp, accountId:S.acc })});
+      closeLoading();
+      Swal.fire({ icon:'success', title:'Registrasi Berhasil', html:`<div style="text-align:left"><p><b>SIMPAN CREDENTIALS INI</b> (ditampilkan sekali):</p><p>Username: <code>${j.username}</code></p><p>Password: <code>${j.passwordPlain}</code></p></div>`, confirmButtonText:'Selesai' })
+        .then(()=> location.href='thankyou.html');
+    }catch(err){ closeLoading(); showError(err.message); }
+  });
 
+  // init
+  document.addEventListener('DOMContentLoaded', ()=>{
+    // kalau user langsung mendarat di Step 4 (mis. refresh), pastikan helper hidup
+    if (document.querySelector('[data-step="4"]')) {
+      populateYears();
+      attachSchoolAutocomplete();
+    }
+  });
+})();

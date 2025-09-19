@@ -11,8 +11,16 @@ module.exports = async (req, res) => {
 
     await conn.login(SF_USERNAME, SF_PASSWORD);
 
+    // If user picked from autocomplete: save Record Id to Master_School__c
+    // Else: fall back to free-text OtherSchool__c
     const accUpd = { Id: accountId };
-    if (masterSchoolId) accUpd.Master_School__c = masterSchoolId; else accUpd.OtherSchool__c = schoolName;
+    if (masterSchoolId) {
+      accUpd.Master_School__c = masterSchoolId;
+      accUpd.OtherSchool__c = null;
+    } else {
+      accUpd.OtherSchool__c = schoolName;
+      accUpd.Master_School__c = null;
+    }
     await conn.sobject('Account').update(accUpd);
 
     await conn.sobject('Opportunity').update({ Id: opportunityId, Graduation_Year__c: graduationYear });

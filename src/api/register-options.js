@@ -1,6 +1,5 @@
 // src/api/register-options.js
-// Wizard options: campuses, intakes (Name only), programs (by intakeId; optional campusId)
-// POST saveReg: simpan Campus__c, Master_Intake__c, Study_Program__c ke Opportunity
+// Wizard options: campuses, intakes, programs, schools (Master_School__c)
 
 const jsforce = require('jsforce');
 
@@ -37,14 +36,14 @@ module.exports = async (req, res) => {
           const r = await conn.query(`
             SELECT Id, Name
             FROM Campus__c
-            ${term ? `WHERE Name LIKE '%${esc(term)}%'` : ''}
+            ${term ? WHERE Name LIKE '%${esc(term)}%' : ''}
             ORDER BY Name
             LIMIT 200
           `);
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
           return ok({ success: true, records: r.records });
         } catch (e) {
-          // Fallback: distinct Account.Master_School__c
+          // fallback if Campus__c not available
           const msg = String(e && e.message || e);
           const fallbackable = /INVALID_TYPE|No such column|is not supported/i.test(msg);
           if (!fallbackable) return ok({ success: true, records: [], errors: [msg], source: 'campuses:err' });
@@ -54,66 +53,64 @@ module.exports = async (req, res) => {
             SELECT Master_School__c
             FROM Account
             WHERE Master_School__c != null
-              ${term ? `AND Master_School__c LIKE '%${esc(term)}%'` : ''}
+              ${term ? AND Master_School__c LIKE '%${esc(term)}%' : ''}
             GROUP BY Master_School__c
             ORDER BY Master_School__c
             LIMIT 200
           `);
-          const rows = (r2.records || []).map(x => ({ Id: x.Master_School__c, Name: x.Master_School__c }));
+          const rows = (r2.records || []).map(x => ({ Id: x.Master_School_c, Name: x.Master_School_c }));
           return ok({ success: true, records: rows, fallback: 'Account.Master_School__c' });
         }
       }
 
-      // ---------- INTAKES (Name only) ----------
+      // ---------- INTAKES ----------
       if (type === 'intakes' || type === 'intake') {
         const conn = await login();
         try {
           const r = await conn.query(`
             SELECT Id, Name
             FROM Master_Intake__c
-            ${campusId ? `WHERE Campus__c = '${esc(campusId)}'` : ''}
+            ${campusId ? WHERE Campus__c = '${esc(campusId)}' : ''}
             ORDER BY Name DESC
             LIMIT 200
           `);
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
           return ok({ success: true, records: r.records.map(x => ({ Id: x.Id, Name: x.Name })) });
         } catch (e) {
-          // Fallback dinamis tahun ajaran: hanya Name
+          // fallback dynamic
           const now = new Date(); const y = now.getFullYear();
           const fallback = [];
           for (let yr = y + 1; yr >= y - 5; yr--) {
-            const name = `${yr}/${yr + 1}`;
+            const name = ${yr}/${yr + 1};
             fallback.push({ Id: name, Name: name });
           }
           return ok({ success: true, records: fallback, fallback: 'dynamic-years', errors: [String(e && e.message || e)] });
         }
       }
 
-      // ---------- PROGRAMS (by intakeId; optional campusId) ----------
+      // ---------- PROGRAMS ----------
       if (type === 'programs' || type === 'program') {
         if (!intakeId) return fail(400, 'intakeId wajib diisi');
         const conn = await login();
         const errors = [];
         let rows = null;
 
-        // Try 1: Junction Study_Program_Intake__c
         try {
-          const campusFilter = campusId ? `AND (Study_Program__r.Campus__c = '${esc(campusId)}')` : '';
+          const campusFilter = campusId ? AND (Study_Program__r.Campus__c = '${esc(campusId)}') : '';
           const q1 = await conn.query(`
-            SELECT Study_Program__c, Study_Program__r.Name
+            SELECT Study_Program_c, Study_Program_r.Name
             FROM Study_Program_Intake__c
             WHERE Master_Intake__c = '${esc(intakeId)}'
               ${campusFilter}
             ORDER BY Study_Program__r.Name
             LIMIT 500
           `);
-          if (q1.totalSize > 0) rows = q1.records.map(r => ({ Id: r.Study_Program__c, Name: r.Study_Program__r?.Name }));
+          if (q1.totalSize > 0) rows = q1.records.map(r => ({ Id: r.Study_Program_c, Name: r.Study_Program_r?.Name }));
         } catch (e) { errors.push('SPI__c: ' + (e.message || String(e))); }
 
-        // Try 2: Study_Program__c dengan lookup Master_Intake__c
         if (!rows || rows.length === 0) {
           try {
-            const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
+            const campusFilter = campusId ? AND Campus__c = '${esc(campusId)}' : '';
             const q2 = await conn.query(`
               SELECT Id, Name
               FROM Study_Program__c
@@ -126,23 +123,6 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.Master_Intake__c: ' + (e.message || String(e))); }
         }
 
-        // Try 3: alternatif Intake__c
-        if (!rows || rows.length === 0) {
-          try {
-            const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
-            const q3 = await conn.query(`
-              SELECT Id, Name
-              FROM Study_Program__c
-              WHERE Intake__c = '${esc(intakeId)}'
-                ${campusFilter}
-              ORDER BY Name
-              LIMIT 500
-            `);
-            if (q3.totalSize > 0) rows = q3.records.map(r => ({ Id: r.Id, Name: r.Name }));
-          } catch (e) { errors.push('SP.Intake__c: ' + (e.message || String(e))); }
-        }
-
-        // Try 4: fallback by campus
         if ((!rows || rows.length === 0) && campusId) {
           try {
             const q4 = await conn.query(`
@@ -164,6 +144,19 @@ module.exports = async (req, res) => {
         });
       }
 
+      // ---------- SCHOOLS (Master_School__c) ----------
+      if (type === 'schools' || type === 'school') {
+        const conn = await login();
+        const r = await conn.query(`
+          SELECT Id, Name
+          FROM Master_School__c
+          ${term ? WHERE Name LIKE '%${esc(term)}%' : ''}
+          ORDER BY Name
+          LIMIT 50
+        `);
+        return ok({ success: true, records: r.records });
+      }
+
       return fail(400, 'Unknown GET type');
     }
 
@@ -177,7 +170,6 @@ module.exports = async (req, res) => {
           return fail(400, 'Param kurang (opportunityId, campusId, intakeId, studyProgramId)');
         }
 
-        // ⬇️ Perbaikan: gunakan Master_Intake__c (bukan Intake__c)
         await conn.sobject('Opportunity').update({
           Id: opportunityId,
           Campus__c: campusId,
@@ -194,5 +186,5 @@ module.exports = async (req, res) => {
     return fail(405, 'Method not allowed');
   } catch (err) {
     return fail(500, err.message || 'Gagal memproses request');
-  }
+  }
 };

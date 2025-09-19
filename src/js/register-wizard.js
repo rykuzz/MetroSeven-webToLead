@@ -1,4 +1,4 @@
-// Wizard 5 langkah – tanpa localStorage
+// Wizard 5 langkah — TANPA localStorage
 (() => {
   const $  = (s, r=document) => r.querySelector(s);
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
@@ -29,10 +29,10 @@
     updateProgress(n);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  const toastOk     = (t) => Swal.fire({ icon:'success', title:'Berhasil', text:t, timer:1600, showConfirmButton:false });
-  const showLoading = (t='Memproses…') => Swal.fire({ title:t, didOpen:()=>Swal.showLoading(), allowOutsideClick:false, showConfirmButton:false });
-  const closeLoading= () => Swal.close();
-  const showError   = (m) => Swal.fire({ icon:'error', title:'Gagal', text:m||'Terjadi kesalahan' });
+  const toastOk      = (t) => Swal.fire({ icon:'success', title:'Berhasil', text:t, timer:1600, showConfirmButton:false });
+  const showLoading  = (t='Memproses…') => Swal.fire({ title:t, didOpen:()=>Swal.showLoading(), allowOutsideClick:false, showConfirmButton:false });
+  const closeLoading = () => Swal.close();
+  const showError    = (m) => Swal.fire({ icon:'error', title:'Gagal', text:m||'Terjadi kesalahan' });
 
   // API helper
   async function api(url, opts) {
@@ -139,7 +139,7 @@
     sel.innerHTML='<option value="">Pilih tahun ajaran</option>';
     recs.forEach(x=> sel.innerHTML += `<option value="${x.Id}">${x.Name}</option>`);
   }
-  // >>>> fungsi yang diperbaiki — selalu tampilkan Name
+  // >>> fungsi yang diperbaiki — selalu tampilkan Name
   async function loadPrograms(campusId,intakeId){
     const sel=$('#programSelect'); if(!sel) return;
     sel.innerHTML='<option value="">Memuat…</option>';
@@ -329,6 +329,6 @@
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // init Step 3 saat masuk
-  document.addEventListener('DOMContentLoaded', ()=> { /* Step handled per-submit */ });
+  // init (Step 3 dijalankan ketika masuk step tsb)
+  document.addEventListener('DOMContentLoaded', ()=> { /* noop */ });
 })();

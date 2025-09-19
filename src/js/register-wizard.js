@@ -14,7 +14,7 @@
     return '+' + p;
   };
 
-  // Safe API: parse JSON; kalau non-JSON tampilkan text-nya
+  // Safe API
   async function api(url, opts) {
     const res = await fetch(url, opts);
     let data = null;
@@ -137,6 +137,7 @@
   $('#intakeSelect')?.addEventListener('change', async ()=>{ const campusId=$('input[name="campus"]:checked')?.value||''; const intakeId=$('#intakeSelect').value||''; if(campusId&&intakeId) await loadPrograms(campusId,intakeId); });
   $('#btnBack3').addEventListener('click', ()=> setStep(2));
 
+  // submit step 3 (tanpa masterBatch/BSP)
   $('#formStep3').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const campusId=$('input[name="campus"]:checked')?.value||'';
@@ -192,9 +193,9 @@
     e.preventDefault();
     const oppId=S.opp, accId=S.acc;
     const gradYear=$('#gradYearSelect').value;
-    const chosenId=$('#schoolId').value.trim();           // kalau dari autocomplete
+    const chosenId=$('#schoolId').value.trim();           // jika pilih dari autocomplete
     const schoolText=$('#schoolInput').value.trim();      // nama yang terlihat
-    const npsnManual=$('#schoolNpsnManual')?.value?.trim?.() || ''; // tambahkan input ini di HTML jika mau isi NPSN manual
+    const npsnManual=$('#schoolNpsnManual')?.value?.trim?.() || ''; // opsional (tambahkan input di HTML bila perlu)
     const photo=$('#photoFile').files[0];
     const msg=$('#msgStep4'); msg.style.display='none';
 

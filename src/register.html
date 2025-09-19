@@ -8,6 +8,15 @@
   <link rel="stylesheet" href="css/responsive.css">
   <link rel="stylesheet" href="css/register-style.css">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    /* Sedikit styling untuk suggestion */
+    .suggest-box{position:relative}
+    .suggest-list{position:absolute;z-index:20;left:0;right:0;max-height:220px;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin-top:4px}
+    .suggest-item{padding:10px 12px;cursor:pointer}
+    .suggest-item:hover{background:#f3f4f6}
+    .muted{color:#6b7280;font-size:12px;margin-left:6px}
+    .inline-checkbox{display:flex;align-items:center;gap:8px;margin-top:6px}
+  </style>
 </head>
 <body>
   <main class="form-container">
@@ -36,7 +45,7 @@
             <label>No. HP *</label><div class="input-group"><span class="prefix">+62</span><input id="phone" class="form-control" placeholder="81234xxxx" required></div>
           </div>
         </div>
-        <div class="note">Sistem: cek Lead (email & phone). Ada → set <code>Is_Convert__c=true</code> (Apex auto-convert). Tidak ada → buat Person Account + Opportunity (RT University, Stage Booking Form).</div>
+        <div class="note">Sistem: cek Lead (email & phone). Ada → set <code>Is_Convert__c=true</code>. Tidak ada → buat Person Account + Opportunity (RT University, Stage Booking Form).</div>
         <div id="msgStep1" class="field-error" style="display:none"></div>
         <div class="actions"><button type="submit" class="submit-btn">Lanjut</button></div>
         <div class="debug-info">Opportunity: <span id="opptyIdLabel">-</span> • Account: <span id="accountIdLabel">-</span></div>
@@ -79,18 +88,37 @@
     <!-- STEP 4 -->
     <section id="step4" class="form-step" data-step="4" style="display:none">
       <form id="formStep4">
-        <!-- Autocomplete sekolah -->
-        <div class="form-group full-width">
+        <!-- Autocomplete mode -->
+        <div id="schoolAutoWrap" class="form-group full-width">
           <label>Sekolah Asal *</label>
-          <input id="schoolInput" class="form-control" placeholder="Ketik nama sekolah atau NPSN…">
+          <div class="suggest-box">
+            <input id="schoolInput" class="form-control" placeholder="Ketik minimal 2 huruf untuk mencari…">
+            <ul id="schoolSuggest" class="suggest-list" style="display:none"></ul>
+          </div>
           <input id="schoolId" type="hidden">
-          <!-- suggestion list is created by JS (ul#schoolSuggestList) -->
+          <div class="inline-checkbox">
+            <input type="checkbox" id="schoolNotFound">
+            <label for="schoolNotFound">Sekolah tidak ditemukan</label>
+          </div>
+        </div>
+
+        <!-- Manual mode -->
+        <div id="schoolManualWrap" class="form-grid" style="display:none">
+          <div class="form-group">
+            <label>Nama Sekolah (manual) *</label>
+            <input id="schoolManualName" class="form-control" placeholder="Ketik nama sekolah lengkap…">
+          </div>
+          <div class="form-group">
+            <label>NPSN (manual) *</label>
+            <input id="schoolManualNpsn" class="form-control" placeholder="Contoh: 12345678">
+          </div>
         </div>
 
         <div class="form-grid">
           <div class="form-group"><label>Tahun Lulus *</label><select id="gradYearSelect" class="form-control"><option value="">Pilih tahun</option></select></div>
           <div class="form-group"><label>Pas Foto 3×4 (PNG/JPG ≤ 1MB) *</label><input id="photoFile" class="form-control" type="file" accept=".png,.jpg,.jpeg"></div>
         </div>
+
         <div id="msgStep4" class="field-error" style="display:none"></div>
         <div class="actions"><button id="btnBack4" type="button" class="btn">Kembali</button><button type="submit" class="submit-btn">Simpan & Lanjut</button></div>
       </form>

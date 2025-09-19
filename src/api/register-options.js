@@ -1,5 +1,5 @@
 // src/api/register-options.js
-// Wizard options: campuses, intakes, programs, schools (MasterSchool__c / Master_School__c / Account.Master_School__c)
+// Wizard options: campuses, intakes, programs, schools/sekolah
 
 const jsforce = require('jsforce');
 const esc = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
 
   const send = (code, obj) => res.status(code).json(obj);
   const ok   = (data) => send(200, data);
-  const fail = (code, msg, extra = {}) => send(code, { success:false, message:msg, ...extra });
+  const fail = (code, msg, extra = {}) => send(code, { success: false, message: msg, ...extra });
 
   async function login() {
     if (!SF_LOGIN_URL || !SF_USERNAME || !SF_PASSWORD) {
@@ -24,7 +24,11 @@ module.exports = async (req, res) => {
   try {
     // =================== GET ===================
     if (method === 'GET') {
-      const { type, term = '', campusId = '', intakeId = '' } = query || {};
+      const { type } = query || {};
+      // dukung term (lama) dan t (versi kamu)
+      const searchTerm = (query.term ?? query.t ?? '').trim();
+      const campusId   = (query.campusId ?? '').trim();
+      const intakeId   = (query.intakeId ?? '').trim();
       if (!type) return fail(400, 'type wajib diisi');
 
       // ---------- CAMPUSES ----------
@@ -34,23 +38,23 @@ module.exports = async (req, res) => {
           const r = await conn.query(`
             SELECT Id, Name
             FROM Campus__c
-            ${term ? `WHERE Name LIKE '%${esc(term)}%'` : ''}
+            ${searchTerm ? `WHERE Name LIKE '%${esc(searchTerm)}%'` : ''}
             ORDER BY Name
             LIMIT 200
           `);
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-          return ok({ success:true, records:r.records });
+          return ok({ success: true, records: r.records });
         } catch (e) {
           const msg = String(e && e.message || e);
           const fallbackable = /INVALID_TYPE|No such column|is not supported/i.test(msg);
-          if (!fallbackable) return ok({ success:true, records:[], errors:[msg], source:'campuses:err' });
+          if (!fallbackable) return ok({ success: true, records: [], errors: [msg], source: 'campuses:err' });
 
           const conn2 = await login();
           const r2 = await conn2.query(`
             SELECT Master_School__c, Master_School__r.Name
             FROM Account
             WHERE Master_School__c != null
-              ${term ? `AND (Master_School__r.Name LIKE '%${esc(term)}%' OR Name LIKE '%${esc(term)}%')` : ''}
+              ${searchTerm ? `AND (Master_School__r.Name LIKE '%${esc(searchTerm)}%' OR Name LIKE '%${esc(searchTerm)}%')` : ''}
             ORDER BY Master_School__r.Name
             LIMIT 500
           `);
@@ -58,9 +62,9 @@ module.exports = async (req, res) => {
           (r2.records || []).forEach(x => {
             const id = x.Master_School__c;
             const nm = x.Master_School__r && x.Master_School__r.Name;
-            if (id && nm && !map.has(id)) map.set(id, { Id:id, Name:nm });
+            if (id && nm && !map.has(id)) map.set(id, { Id: id, Name: nm });
           });
-          return ok({ success:true, records:Array.from(map.values()), fallback:'Account.Master_School__c' });
+          return ok({ success: true, records: Array.from(map.values()), fallback: 'Account.Master_School__c' });
         }
       }
 
@@ -76,15 +80,16 @@ module.exports = async (req, res) => {
             LIMIT 200
           `);
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-          return ok({ success:true, records:r.records.map(x => ({ Id:x.Id, Name:x.Name })) });
+          return ok({ success: true, records: r.records.map(x => ({ Id: x.Id, Name: x.Name })) });
         } catch (e) {
+          // fallback dinamis agar UI tetap hidup
           const now = new Date(); const y = now.getFullYear();
           const fallback = [];
           for (let yr = y + 1; yr >= y - 5; yr--) {
             const name = `${yr}/${yr + 1}`;
-            fallback.push({ Id:name, Name:name });
+            fallback.push({ Id: name, Name: name });
           }
-          return ok({ success:true, records:fallback, fallback:'dynamic-years', errors:[String(e && e.message || e)] });
+          return ok({ success: true, records: fallback, fallback: 'dynamic-years', errors: [String(e && e.message || e)] });
         }
       }
 
@@ -95,6 +100,7 @@ module.exports = async (req, res) => {
         const errors = [];
         let rows = null;
 
+        // Try 1: junction
         try {
           const campusFilter = campusId ? `AND (Study_Program__r.Campus__c = '${esc(campusId)}')` : '';
           const q1 = await conn.query(`
@@ -105,11 +111,10 @@ module.exports = async (req, res) => {
             ORDER BY Study_Program__r.Name
             LIMIT 500
           `);
-          if (q1.totalSize > 0) {
-            rows = q1.records.map(r => ({ Id:r.Study_Program__c, Name:r.Study_Program__r?.Name }));
-          }
+          if (q1.totalSize > 0) rows = q1.records.map(r => ({ Id: r.Study_Program__c, Name: r.Study_Program__r?.Name }));
         } catch (e) { errors.push('SPI__c: ' + (e.message || String(e))); }
 
+        // Try 2: lookup langsung di Study_Program__c
         if (!rows || rows.length === 0) {
           try {
             const campusFilter = campusId ? `AND Campus__c = '${esc(campusId)}'` : '';
@@ -121,10 +126,11 @@ module.exports = async (req, res) => {
               ORDER BY Name
               LIMIT 500
             `);
-            if (q2.totalSize > 0) rows = q2.records.map(r => ({ Id:r.Id, Name:r.Name }));
+            if (q2.totalSize > 0) rows = q2.records.map(r => ({ Id: r.Id, Name: r.Name }));
           } catch (e) { errors.push('SP.Master_Intake__c: ' + (e.message || String(e))); }
         }
 
+        // Try 3: fallback by campus
         if ((!rows || rows.length === 0) && campusId) {
           try {
             const q4 = await conn.query(`
@@ -134,89 +140,75 @@ module.exports = async (req, res) => {
               ORDER BY Name
               LIMIT 500
             `);
-            if (q4.totalSize > 0) rows = q4.records.map(r => ({ Id:r.Id, Name:r.Name }));
+            if (q4.totalSize > 0) rows = q4.records.map(r => ({ Id: r.Id, Name: r.Name }));
           } catch (e) { errors.push('SP.byCampus: ' + (e.message || String(e))); }
         }
 
-        return ok({ success:true, records:rows || [], source:rows && rows.length ? 'resolved' : 'not-found', errors:errors.length ? errors : undefined });
+        return ok({
+          success: true,
+          records: rows || [],
+          source: rows && rows.length ? 'resolved' : 'not-found',
+          errors: errors.length ? errors : undefined
+        });
       }
 
-      // ---------- SCHOOLS (MasterSchool__c / Master_School__c / Account.Master_School__c) ----------
+      // ---------- SEKOLAH (versi kamu): type=sekolah, param t ----------
+      if (type === 'sekolah') {
+        const conn = await login();
+        if (searchTerm.length < 2) return fail(400, 'Kata kunci terlalu pendek');
+
+        const q = await conn.query(`
+          SELECT Id, Name, NPSN__c
+          FROM MasterSchool__c
+          WHERE Name LIKE '%${esc(searchTerm)}%' OR NPSN__c LIKE '%${esc(searchTerm)}%'
+          ORDER BY Name
+          LIMIT 10
+        `);
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+        // kembalikan bentuk mirip contohmu (totalSize + records)
+        return res.status(200).json({ totalSize: q.totalSize, records: q.records });
+      }
+
+      // ---------- SCHOOLS (umum): type=schools|school, param term ----------
       if (type === 'schools' || type === 'school') {
         const conn = await login();
         const errors = [];
         let rows = null;
 
-        // Try 1: MasterSchool__c + NPSN__c
+        // Try 1: MasterSchool__c (Name/NPSN__c)
         try {
           const r1 = await conn.query(`
             SELECT Id, Name, NPSN__c
             FROM MasterSchool__c
-            WHERE ${term ? `(Name LIKE '%${esc(term)}%' OR NPSN__c LIKE '%${esc(term)}%')` : `Name != null`}
+            WHERE ${searchTerm ? `(Name LIKE '%${esc(searchTerm)}%' OR NPSN__c LIKE '%${esc(searchTerm)}%')` : `Name != null`}
             ORDER BY Name
             LIMIT 50
           `);
-          if (r1.totalSize > 0) {
-            rows = r1.records.map(x => ({ Id:x.Id, Name:x.Name, NPSN:x.NPSN__c || null }));
-          }
-        } catch (e) { errors.push('MasterSchool__c.NPSN__c: ' + (e.message || String(e))); }
+          if (r1.totalSize > 0) rows = r1.records.map(x => ({ Id: x.Id, Name: x.Name, NPSN: x.NPSN__c || null }));
+        } catch (e) { errors.push('MasterSchool__c: ' + (e.message || String(e))); }
 
-        // Try 2: MasterSchool__c + npsn__c (kalau casing berbeda)
-        if (!rows || rows.length === 0) {
-          try {
-            const r1b = await conn.query(`
-              SELECT Id, Name, npsn__c
-              FROM MasterSchool__c
-              WHERE ${term ? `(Name LIKE '%${esc(term)}%' OR npsn__c LIKE '%${esc(term)}%')` : `Name != null`}
-              ORDER BY Name
-              LIMIT 50
-            `);
-            if (r1b.totalSize > 0) {
-              rows = r1b.records.map(x => ({ Id:x.Id, Name:x.Name, NPSN:x.npsn__c || null }));
-            }
-          } catch (e) { errors.push('MasterSchool__c.npsn__c: ' + (e.message || String(e))); }
-        }
-
-        // Try 3: Master_School__c + NPSN__c
+        // Try 2: Master_School__c
         if (!rows || rows.length === 0) {
           try {
             const r2 = await conn.query(`
               SELECT Id, Name, NPSN__c
               FROM Master_School__c
-              WHERE ${term ? `(Name LIKE '%${esc(term)}%' OR NPSN__c LIKE '%${esc(term)}%')` : `Name != null`}
+              WHERE ${searchTerm ? `(Name LIKE '%${esc(searchTerm)}%' OR NPSN__c LIKE '%${esc(searchTerm)}%')` : `Name != null`}
               ORDER BY Name
               LIMIT 50
             `);
-            if (r2.totalSize > 0) {
-              rows = r2.records.map(x => ({ Id:x.Id, Name:x.Name, NPSN:x.NPSN__c || null }));
-            }
-          } catch (e) { errors.push('Master_School__c.NPSN__c: ' + (e.message || String(e))); }
+            if (r2.totalSize > 0) rows = r2.records.map(x => ({ Id: x.Id, Name: x.Name, NPSN: x.NPSN__c || null }));
+          } catch (e) { errors.push('Master_School__c: ' + (e.message || String(e))); }
         }
 
-        // Try 4: Master_School__c + npsn__c
-        if (!rows || rows.length === 0) {
-          try {
-            const r2b = await conn.query(`
-              SELECT Id, Name, npsn__c
-              FROM Master_School__c
-              WHERE ${term ? `(Name LIKE '%${esc(term)}%' OR npsn__c LIKE '%${esc(term)}%')` : `Name != null`}
-              ORDER BY Name
-              LIMIT 50
-            `);
-            if (r2b.totalSize > 0) {
-              rows = r2b.records.map(x => ({ Id:x.Id, Name:x.Name, NPSN:x.npsn__c || null }));
-            }
-          } catch (e) { errors.push('Master_School__c.npsn__c: ' + (e.message || String(e))); }
-        }
-
-        // Try 5: Fallback ke Account.Master_School__c (distinct)
+        // Try 3: Fallback Account.Master_School__c (distinct)
         if (!rows || rows.length === 0) {
           try {
             const r3 = await conn.query(`
               SELECT Master_School__c, Master_School__r.Name
               FROM Account
               WHERE Master_School__c != null
-                ${term ? `AND (Master_School__r.Name LIKE '%${esc(term)}%' OR Name LIKE '%${esc(term)}%')` : ''}
+                ${searchTerm ? `AND (Master_School__r.Name LIKE '%${esc(searchTerm)}%' OR Name LIKE '%${esc(searchTerm)}%')` : ''}
               ORDER BY Master_School__r.Name
               LIMIT 500
             `);
@@ -224,13 +216,13 @@ module.exports = async (req, res) => {
             (r3.records || []).forEach(x => {
               const id = x.Master_School__c;
               const nm = x.Master_School__r && x.Master_School__r.Name;
-              if (id && nm && !map.has(id)) map.set(id, { Id:id, Name:nm, NPSN:null });
+              if (id && nm && !map.has(id)) map.set(id, { Id: id, Name: nm, NPSN: null });
             });
             rows = Array.from(map.values());
           } catch (e) { errors.push('Account.Master_School__c: ' + (e.message || String(e))); }
         }
 
-        return ok({ success:true, records:rows || [], errors:errors.length ? errors : undefined });
+        return ok({ success: true, records: rows || [], errors: errors.length ? errors : undefined });
       }
 
       return fail(400, 'Unknown GET type');
@@ -245,13 +237,15 @@ module.exports = async (req, res) => {
         if (!opportunityId || !campusId || !intakeId || !studyProgramId) {
           return fail(400, 'Param kurang (opportunityId, campusId, intakeId, studyProgramId)');
         }
+
         await conn.sobject('Opportunity').update({
           Id: opportunityId,
           Campus__c: campusId,
           Master_Intake__c: intakeId,
           Study_Program__c: studyProgramId
         });
-        return ok({ success:true });
+
+        return ok({ success: true });
       }
 
       return fail(400, 'Unknown POST action');

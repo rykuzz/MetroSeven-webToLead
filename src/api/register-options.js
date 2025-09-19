@@ -101,6 +101,7 @@ module.exports = async (req, res) => {
       }
 
       // ---------- PROGRAMS ----------
+      // WAJIB berdasarkan intakeId
       if (type === 'programs' || type === 'program') {
         if (!intakeId) return fail(400, 'intakeId wajib diisi');
         const conn = await login();
@@ -139,7 +140,7 @@ module.exports = async (req, res) => {
           } catch (e) { errors.push('SP.Master_Intake__c: ' + (e.message || String(e))); }
         }
 
-        // Try 3: fallback by campus
+        // Try 3: fallback by campus (kalau skema kamu tidak punya relasi ke intake)
         if ((!rows || rows.length === 0) && campusId) {
           try {
             const soql3 = `

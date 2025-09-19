@@ -14,7 +14,6 @@
     return '+' + p;
   };
 
-  // Safe API (JSON-first)
   async function api(url, opts) {
     const res = await fetch(url, opts);
     let data = null;
@@ -23,10 +22,9 @@
       const t = await res.text().catch(()=> '');
       throw new Error(t?.slice(0,400) || 'Server mengembalikan respons non-JSON');
     }
-    if (!res.ok || data?.success === false) throw new Error(data?.message || `Permintaan gagal (${res.status})`);
+    if (!res.ok || data?.success === false) throw new Error(data?.message || Permintaan gagal (${res.status}));
     return data;
   }
-
   async function fileToBase64(file) {
     const buf = await file.arrayBuffer();
     let binary=''; const bytes=new Uint8Array(buf);
@@ -35,18 +33,18 @@
   }
 
   // === Local state
-  const K = (k) => `m7_reg_${k}`;
+  const K = (k) => m7_reg_${k};
   const S = {
     get opp() { return localStorage.getItem(K('opp')) || ''; },
     set opp(v) { localStorage.setItem(K('opp'), v || ''); },
     get acc() { return localStorage.getItem(K('acc')) || ''; },
     set acc(v) { localStorage.setItem(K('acc'), v || ''); },
     set pemohon(o){ localStorage.setItem(K('pemohon'), JSON.stringify(o||{})); },
-    get pemohon(){ try{ return JSON.parse(localStorage.getItem(K('pemohon')))||{}; }catch{ return {}; } },
+    get pemohon(){ try{ return JSON.parse(localStorage.getItem(K('pemohon'))||'{}'); }catch{ return {}; } },
     set reg(o){ localStorage.setItem(K('reg'), JSON.stringify(o||{})); },
-    get reg(){ try{ return JSON.parse(localStorage.getItem(K('reg')))||{}; }catch{ return {}; } },
+    get reg(){ try{ return JSON.parse(localStorage.getItem(K('reg'))||'{}'); }catch{ return {}; } },
     set sekolah(o){ localStorage.setItem(K('sekolah'), JSON.stringify(o||{})); },
-    get sekolah(){ try{ return JSON.parse(localStorage.getItem(K('sekolah')))||{}; }catch{ return {}; } },
+    get sekolah(){ try{ return JSON.parse(localStorage.getItem(K('sekolah'))||'{}'); }catch{ return {}; } },
   };
 
   // === UI helpers
@@ -70,34 +68,26 @@
 
   async function pollStatus(email, phone) {
     for (let i=0;i<10;i++){
-      try {
-        const j = await api(`/api/register-status?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`);
-        if (j.opportunityId) return j;
-      } catch {}
+      try { const j = await api(/api/register-status?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}); if (j.opportunityId) return j; }
+      catch {}
       await new Promise(r=>setTimeout(r,1000));
     }
     return null;
   }
 
   // === STEP 1
-  $('#formStep1')?.addEventListener('submit', async (e)=>{
+  $('#formStep1').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const firstName=$('#firstName').value.trim();
     const lastName=$('#lastName').value.trim();
     const email=$('#email').value.trim();
     const phone=normalizePhone($('#phone').value);
     const msg=$('#msgStep1'); msg.style.display='none';
-    if(!firstName || !lastName || !emailOk(email) || !phone){
-      msg.textContent='Lengkapi data dengan benar.'; msg.style.display='block'; return;
-    }
+    if(!firstName || !lastName || !emailOk(email) || !phone){ msg.textContent='Lengkapi data dengan benar.'; msg.style.display='block'; return; }
 
     try{
       showLoading('Menyiapkan data Anda…');
-      const j = await api('/api/register-lead-convert',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({firstName,lastName,email,phone})
-      });
+      const j = await api('/api/register-lead-convert',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({firstName,lastName,email,phone})});
       let oppId=j.opportunityId, accId=j.accountId;
       if(!oppId){
         const ps=await pollStatus(email,phone);
@@ -105,15 +95,14 @@
         oppId=ps.opportunityId; accId=ps.accountId;
       }
       S.opp=oppId; S.acc=accId; S.pemohon={firstName,lastName,email,phone};
-      $('#opptyIdLabel').textContent=oppId;
-      $('#accountIdLabel').textContent=accId;
+      $('#opptyIdLabel').textContent=oppId; $('#accountIdLabel').textContent=accId;
       closeLoading(); toastOk('Data pemohon disimpan.'); setStep(2);
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
   // === STEP 2
-  $('#btnBack2')?.addEventListener('click', ()=> setStep(1));
-  $('#formStep2')?.addEventListener('submit', async (e)=>{
+  $('#btnBack2').addEventListener('click', ()=> setStep(1));
+  $('#formStep2').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const oppId=S.opp, accId=S.acc;
     const file=$('#proofFile').files[0];
@@ -122,17 +111,11 @@
     if(!file){ msg.textContent='Pilih file bukti pembayaran.'; msg.style.display='block'; return; }
     if(file.size>1024*1024){ msg.textContent='Maksimal 1MB.'; msg.style.display='block'; return; }
     const allowed=['application/pdf','image/png','image/jpeg'];
-    if(file.type && !allowed.includes(file.type)){
-      msg.textContent='Format harus PDF/PNG/JPG.'; msg.style.display='block'; return;
-    }
+    if(file.type && !allowed.includes(file.type)){ msg.textContent='Format harus PDF/PNG/JPG.'; msg.style.display='block'; return; }
 
     try{
       showLoading('Mengunggah bukti pembayaran…');
-      const payload={
-        opportunityId:oppId, accountId:accId,
-        filename:file.name, mime:file.type||'application/octet-stream',
-        data:await fileToBase64(file)
-      };
+      const payload={ opportunityId:oppId, accountId:accId, filename:file.name, mime:file.type||'application/octet-stream', data:await fileToBase64(file) };
       await api('/api/register-upload-proof',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
       closeLoading(); toastOk('Bukti pembayaran berhasil diupload.'); setStep(3); loadStep3Options();
     }catch(err){ closeLoading(); showError(err.message); }
@@ -147,58 +130,50 @@
       if(!recs.length){ wrap.innerHTML='<div class="field-error">Data campus tidak tersedia.</div>'; return; }
       wrap.innerHTML='';
       recs.forEach((c,i)=>{
-        const id=`camp_${c.Id}`;
+        const id=camp_${c.Id};
         const label=document.createElement('label');
         label.className='radio-item'; label.htmlFor=id;
-        label.innerHTML=`
-          <input type="radio" id="${id}" name="campus" value="${c.Id}" ${i===0?'checked':''}>
-          <div><div class="radio-title">${c.Name}</div></div>`;
+        label.innerHTML=<input type="radio" id="${id}" name="campus" value="${c.Id}" ${i===0?'checked':''}><div><div class="radio-title">${c.Name}</div></div>;
         wrap.appendChild(label);
       });
     }catch{ wrap.innerHTML='<div class="field-error">Gagal memuat campus.</div>'; }
   }
-
   async function loadIntakes(campusId){
     const sel=$('#intakeSelect'); sel.innerHTML='<option value="">Memuat…</option>';
-    const j=await api(`/api/register-options?type=intakes${campusId?`&campusId=${encodeURIComponent(campusId)}`:''}`);
+    const j=await api(/api/register-options?type=intakes${campusId?&campusId=${encodeURIComponent(campusId)}:''});
     const recs=j.records||[];
     sel.innerHTML='<option value="">Pilih tahun ajaran</option>';
-    recs.forEach(x=> sel.innerHTML += `<option value="${x.Id}">${x.Name}</option>`);
+    recs.forEach(x=> sel.innerHTML += <option value="${x.Id}">${x.Name}</option>);
   }
-
   async function loadPrograms(campusId,intakeId){
     const sel=$('#programSelect');
     if(!intakeId){ sel.innerHTML='<option value="">Pilih intake terlebih dahulu</option>'; return; }
     sel.innerHTML='<option value="">Memuat…</option>';
-    const j=await api(`/api/register-options?type=programs&intakeId=${encodeURIComponent(intakeId)}${campusId?`&campusId=${encodeURIComponent(campusId)}`:''}`);
+    const j=await api(/api/register-options?type=programs&intakeId=${encodeURIComponent(intakeId)}${campusId?&campusId=${encodeURIComponent(campusId)}:''});
     const recs=j.records||[];
     if(!recs.length){ sel.innerHTML='<option value="">Program belum tersedia untuk kombinasi ini</option>'; return; }
     sel.innerHTML='<option value="">Pilih program</option>';
-    recs.forEach(x=> sel.innerHTML+=`<option value="${x.Id}">${x.Name}</option>`);
+    recs.forEach(x=> sel.innerHTML+=<option value="${x.Id}">${x.Name}</option>);
   }
-
   async function loadStep3Options(){
     await loadCampuses();
     const campusId=$('input[name="campus"]:checked')?.value;
     if(campusId) await loadIntakes(campusId); else await loadIntakes('');
   }
-
   $('#campusRadios')?.addEventListener('change', async (e)=>{
     if(e.target?.name==='campus'){
       await loadIntakes(e.target.value);
       $('#programSelect').innerHTML='<option value="">Pilih intake terlebih dahulu</option>';
     }
   });
-
   $('#intakeSelect')?.addEventListener('change', async ()=>{
     const campusId=$('input[name="campus"]:checked')?.value||'';
     const intakeId=$('#intakeSelect').value||'';
     await loadPrograms(campusId,intakeId);
   });
+  $('#btnBack3').addEventListener('click', ()=> setStep(2));
 
-  $('#btnBack3')?.addEventListener('click', ()=> setStep(2));
-
-  $('#formStep3')?.addEventListener('submit', async (e)=>{
+  $('#formStep3').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const campusId=$('input[name="campus"]:checked')?.value||'';
     const intakeId=$('#intakeSelect').value;
@@ -210,89 +185,105 @@
     try{
       showLoading('Menyimpan pilihan program…');
       await api('/api/register-options',{
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ action:'saveReg', opportunityId:S.opp, campusId, intakeId, studyProgramId:programId })
       });
       S.reg={ campusId,intakeId,programId };
       closeLoading(); toastOk('Preferensi studi tersimpan.');
       setStep(4);
       populateYears();
-      attachSchoolAutocomplete(); // panggil autocomplete saat masuk Step 4
+      attachSchoolAutocomplete();
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
   // === STEP 4
-
-  // Tahun lulus: now..now+5 (naik)
   function populateYears(){
     const sel=$('#gradYearSelect');
-    if(!sel) return;
     const now=new Date().getFullYear();
     const max=now+5;
     sel.innerHTML='<option value="">Pilih tahun</option>';
-    for(let y=now;y<=max;y++) sel.innerHTML+=`<option value="${y}">${y}</option>`;
+    for(let y=now;y<=max;y++) sel.innerHTML+=<option value="${y}">${y}</option>;
   }
 
-  // Autocomplete sekolah menggunakan <datalist> + endpoint type=schools&term=...
+  // *** Autocomplete sekolah (MasterSchool__c) — NO inline styling ***
   function attachSchoolAutocomplete(){
-    const input  = $('#schoolInput');
-    const hidden = $('#schoolId');
-    if (!input || !hidden) return;
+    const input = $('#schoolInput');
+    const hidden = $('#schoolId'); // stores SF Record Id after selection
+    if (!input) return;
 
-    // siapkan datalist
-    let list = $('#schoolList');
+    // Create a simple suggestions list right after the input.
+    let list = $('#schoolSuggestList');
     if (!list) {
-      list = document.createElement('datalist');
-      list.id = 'schoolList';
-      document.body.appendChild(list);
+      list = document.createElement('ul');
+      list.id = 'schoolSuggestList';
+      list.className = 'school-suggest-list'; // style in your CSS as desired
+      list.hidden = true;
+      input.insertAdjacentElement('afterend', list);
     }
-    input.setAttribute('list', 'schoolList');
+
+    function clearList(){
+      list.innerHTML = '';
+      list.hidden = true;
+    }
+
+    function show(items){
+      list.innerHTML = '';
+      if (!items || !items.length) { clearList(); return; }
+      items.forEach(it => {
+        const li = document.createElement('li');
+        li.className = 'school-suggest-item';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'school-suggest-button';
+        btn.textContent = it.NPSN ? ${it.Name} (NPSN ${it.NPSN}) : it.Name;
+        btn.addEventListener('click', () => {
+          input.value = btn.textContent;
+          hidden.value = it.Id;     // Save Record Id for submission
+          clearList();
+        });
+        li.appendChild(btn);
+        list.appendChild(li);
+      });
+      list.hidden = false;
+    }
 
     let timer = null;
-    let last = []; // cache hasil terakhir [{Id, Name, NPSN}]
-
-    const labelOf = (r) => r.NPSN ? `${r.Name} (${r.NPSN})` : r.Name;
-
     async function search(term){
-      if (!term || term.length < 2) { list.innerHTML=''; last=[]; hidden.value=''; return; }
+      if (!term || term.length < 2) { clearList(); return; }
       try{
-        // PAKAI endpoint yang sudah terbukti OK
-        const res = await fetch(`/api/register-options?type=schools&term=${encodeURIComponent(term)}`);
+        const res = await fetch(/api/register-options?type=sekolah&t=${encodeURIComponent(term)});
         const data = await res.json();
-        const recs = (data.records || []).map(r => ({ Id:r.Id, Name:r.Name, NPSN:r.NPSN || null }));
-        last = recs;
-        list.innerHTML = recs.map(r => `<option value="${labelOf(r)}"></option>`).join('');
+        const recs = (data.records || []).map(r => ({ Id:r.Id, Name:r.Name, NPSN:r.NPSN__c || r.NPSN || null }));
+        show(recs);
       }catch{
-        list.innerHTML=''; last=[]; hidden.value='';
+        clearList();
       }
     }
 
-    // Ketik: cari (debounce)
-    input.addEventListener('input', ()=>{
-      hidden.value = '';
+    input.addEventListener('input', () => {
+      hidden.value = ''; // reset until user selects an item
       clearTimeout(timer);
-      timer = setTimeout(()=> search(input.value.trim()), 250);
+      timer = setTimeout(() => search(input.value.trim()), 250);
     });
 
-    // Saat user memilih salah satu item
-    input.addEventListener('change', ()=>{
-      const val = input.value.trim();
-      const hit = last.find(r => labelOf(r) === val) || last.find(r => r.Name === val);
-      hidden.value = hit ? hit.Id : '';
+    // Click outside to close
+    document.addEventListener('click', (e)=>{
+      if (e.target !== input && !list.contains(e.target)) {
+        clearList();
+      }
     });
   }
 
-  $('#btnBack4')?.addEventListener('click', ()=> setStep(3));
-
-  $('#formStep4')?.addEventListener('submit', async (e)=>{
+  $('#btnBack4').addEventListener('click', ()=> setStep(3));
+  $('#formStep4').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const oppId=S.opp, accId=S.acc;
-    const schoolId=$('#schoolId').value.trim();
-    const schoolName=$('#schoolInput').value.trim();
+    const schoolId=$('#schoolId').value.trim();      // from autocomplete
+    const schoolName=$('#schoolInput').value.trim(); // label shown
     const gradYear=$('#gradYearSelect').value;
     const photo=$('#photoFile').files[0];
     const msg=$('#msgStep4'); msg.style.display='none';
-
     if(!schoolName){ msg.textContent='Isi sekolah asal.'; msg.style.display='block'; return; }
     if(!gradYear){ msg.textContent='Pilih tahun lulus.'; msg.style.display='block'; return; }
     if(!photo){ msg.textContent='Pilih pas foto.'; msg.style.display='block'; return; }
@@ -301,17 +292,18 @@
     try{
       showLoading('Menyimpan data sekolah & pas foto…');
       await api('/api/register-save-education',{
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          opportunityId:oppId, accountId:accId,
-          masterSchoolId:schoolId||null, schoolName, graduationYear:gradYear
+          opportunityId:oppId,
+          accountId:accId,
+          masterSchoolId: schoolId || null,
+          schoolName,
+          graduationYear:gradYear
         })
       });
-      const payload2={
-        opportunityId:oppId, accountId:accId,
-        filename:photo.name, mime:photo.type||'image/jpeg',
-        data:await fileToBase64(photo)
-      };
+
+      const payload2={ opportunityId:oppId, accountId:accId, filename:photo.name, mime:photo.type||'image/jpeg', data:await fileToBase64(photo) };
       await api('/api/register-upload-photo',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload2) });
       S.sekolah={ schoolId, schoolName, gradYear, photoName:photo.name };
       closeLoading(); toastOk('Data sekolah & pas foto tersimpan.'); buildReview(); setStep(5);
@@ -319,8 +311,7 @@
   });
 
   // === STEP 5
-  $('#btnBack5')?.addEventListener('click', ()=> setStep(4));
-
+  $('#btnBack5').addEventListener('click', ()=> setStep(4));
   function buildReview(){
     const p=S.pemohon, r=S.reg, s=S.sekolah;
     $('#reviewBox').innerHTML = `
@@ -341,30 +332,23 @@
       </div>
       <div class="hint">Saat Submit: Stage Opportunity → <b>Registration</b> & credentials ditampilkan sekali.</div>`;
   }
-
-  $('#btnSubmitFinal')?.addEventListener('click', async ()=>{
+  $('#btnSubmitFinal').addEventListener('click', async ()=>{
     try{
       showLoading('Menyelesaikan registrasi…');
-      const j = await api('/api/register-finalize',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ opportunityId:S.opp, accountId:S.acc })
-      });
+      const j = await api('/api/register-finalize',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ opportunityId:S.opp, accountId:S.acc })});
       closeLoading();
       Swal.fire({
-        icon:'success', title:'Registrasi Berhasil',
-        html:`<div style="text-align:left">
-          <p><b>SIMPAN CREDENTIALS INI</b> (ditampilkan sekali):</p>
-          <p>Username: <code>${j.username}</code></p>
-          <p>Password: <code>${j.passwordPlain}</code></p>
-        </div>`, confirmButtonText:'Selesai'
+        icon:'success',
+        title:'Registrasi Berhasil',
+        html:<div style="text-align:left"><p><b>SIMPAN CREDENTIALS INI</b> (ditampilkan sekali):</p><p>Username: <code>${j.username}</code></p><p>Password: <code>${j.passwordPlain}</code></p></div>,
+        confirmButtonText:'Selesai'
       }).then(()=> location.href='thankyou.html');
     }catch(err){ closeLoading(); showError(err.message); }
   });
 
-  // init: kalau mendarat langsung di Step 4 (refresh)
+  // init
   document.addEventListener('DOMContentLoaded', ()=>{
-    const step4 = document.querySelector('[data-step="4"]');
-    if (step4 && step4.style.display !== 'none') {
+    if (document.querySelector('[data-step="4"]')) {
       populateYears();
       attachSchoolAutocomplete();
     }

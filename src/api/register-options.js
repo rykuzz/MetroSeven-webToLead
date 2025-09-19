@@ -1,5 +1,5 @@
 // src/api/register-options.js
-// Wizard options: campuses, intakes, programs, schools (Master_School__c)
+// Wizard options: campuses, intakes, programs, schools (via Account.Master_School__c)
 
 const jsforce = require('jsforce');
 
@@ -43,26 +43,28 @@ module.exports = async (req, res) => {
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
           return ok({ success: true, records: r.records });
         } catch (e) {
-          // fallback if Campus__c not available
+          // fallback jika Campus__c tidak ada: pakai Account.Master_School__c (distinct)
           const msg = String(e && e.message || e);
           const fallbackable = /INVALID_TYPE|No such column|is not supported/i.test(msg);
           if (!fallbackable) return ok({ success: true, records: [], errors: [msg], source: 'campuses:err' });
 
           const conn2 = await login();
           const r2 = await conn2.query(`
-            SELECT Master_School__c
+            SELECT Master_School__c, Master_School__r.Name
             FROM Account
             WHERE Master_School__c != null
-              ${term ? `AND Master_School__c LIKE '%${esc(term)}%'` : ''}
-            GROUP BY Master_School__c
-            ORDER BY Master_School__c
-            LIMIT 200
+              ${term ? `AND (Master_School__r.Name LIKE '%${esc(term)}%' OR Name LIKE '%${esc(term)}%')` : ''}
+            ORDER BY Master_School__r.Name
+            LIMIT 500
           `);
-          const rows = (r2.records || []).map(x => ({
-            Id: x.Master_School__c,
-            Name: x.Master_School__c
-          }));
-          return ok({ success: true, records: rows, fallback: 'Account.Master_School__c' });
+          // de-dupe berdasar Master_School__c
+          const map = new Map();
+          (r2.records || []).forEach(x => {
+            const id = x.Master_School__c;
+            const nm = x.Master_School__r && x.Master_School__r.Name;
+            if (id && nm && !map.has(id)) map.set(id, { Id: id, Name: nm });
+          });
+          return ok({ success: true, records: Array.from(map.values()), fallback: 'Account.Master_School__c' });
         }
       }
 
@@ -80,7 +82,7 @@ module.exports = async (req, res) => {
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
           return ok({ success: true, records: r.records.map(x => ({ Id: x.Id, Name: x.Name })) });
         } catch (e) {
-          // fallback dynamic
+          // fallback dynamic (sekadar agar UI tetap jalan)
           const now = new Date(); const y = now.getFullYear();
           const fallback = [];
           for (let yr = y + 1; yr >= y - 5; yr--) {
@@ -155,17 +157,25 @@ module.exports = async (req, res) => {
         });
       }
 
-      // ---------- SCHOOLS (Master_School__c) ----------
+      // ---------- SCHOOLS (via Account.Master_School__c) ----------
       if (type === 'schools' || type === 'school') {
         const conn = await login();
         const r = await conn.query(`
-          SELECT Id, Name
-          FROM Master_School__c
-          ${term ? `WHERE Name LIKE '%${esc(term)}%'` : ''}
-          ORDER BY Name
-          LIMIT 50
+          SELECT Master_School__c, Master_School__r.Name, Name
+          FROM Account
+          WHERE Master_School__c != null
+            ${term ? `AND (Master_School__r.Name LIKE '%${esc(term)}%' OR Name LIKE '%${esc(term)}%')` : ''}
+          ORDER BY Master_School__r.Name
+          LIMIT 500
         `);
-        return ok({ success: true, records: r.records });
+        // de-dupe berdasarkan Master_School__c
+        const map = new Map();
+        (r.records || []).forEach(x => {
+          const id = x.Master_School__c;
+          const nm = x.Master_School__r && x.Master_School__r.Name;
+          if (id && nm && !map.has(id)) map.set(id, { Id: id, Name: nm });
+        });
+        return ok({ success: true, records: Array.from(map.values()) });
       }
 
       return fail(400, 'Unknown GET type');
@@ -184,7 +194,7 @@ module.exports = async (req, res) => {
         await conn.sobject('Opportunity').update({
           Id: opportunityId,
           Campus__c: campusId,
-          Master_Intake__c: intakeId,   // <- sesuai field di org kamu
+          Master_Intake__c: intakeId,
           Study_Program__c: studyProgramId
         });
 

@@ -1,336 +1,133 @@
-(() => {
-  const $  = (s, r = document) => r.querySelector(s);
-  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-
-  const grid     = $("#grid");
-  const qEl      = $("#q");
-  const statusEl = $("#status");
-  const sortEl   = $("#sort");
-  const msgEl    = $("#msg");
-  const prevBtn  = $("#prev");
-  const nextBtn  = $("#next");
-  const pageInfo = $("#pageInfo");
-  const submitBtn= $("#interest_submit");
-
-  // featured carousel els
-  const featWrap = $("#featured");
-  const featTrack= $("#featTrack");
-  const featDots = $("#featDots");
-  const featPrev = $("#featPrev");
-  const featNext = $("#featNext");
-
-  let state = { q: "", status: "active", sort: "startDateDesc", page: 1, limit: 12, total: 0 };
-
-  const rupiah  = v => v==null ? null : new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(v);
-  const fmtDate = d => d ? new Date(d).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : null;
-
-  // ===== Featured Carousel =====
-  let slides = [];
-  let current = 0;
-  let autoTimer = null;
-  const AUTO_INTERVAL = 5000;
-
-  function buildSlide(rec){
-    const img = rec.imageUrl || 'assets/images/promo-placeholder.jpg';
-    const dateStr = [fmtDate(rec.startDate), fmtDate(rec.endDate)].filter(Boolean).join(' — ');
-    const priceStr = rec.price!=null ? rupiah(rec.price) : '';
-    const discountStr = rec.discountPercent!=null ? `${rec.discountPercent}% OFF` : '';
-    return `
-    <div class="slide" data-campaign="${rec.id}" role="option" aria-label="${rec.name}">
-      <img src="${img}" alt="${rec.name}">
-      <div class="content">
-        <h3 class="title">${rec.name}</h3>
-        <div class="meta">${[dateStr, rec.category].filter(Boolean).join(' • ')}</div>
-        <div class="meta">${[priceStr, discountStr].filter(Boolean).join(' · ')}</div>
-        <div class="actions">
-          <button class="btn btn-primary" type="button" data-register data-campaign="${rec.id}" data-name="${rec.name}">Daftar Promo</button>
-          <span class="badge badge-quota" data-quota-for="${rec.id}" hidden>Kuota: …</span>
-        </div>
-      </div>
-    </div>`;
+:root{
+  --card:#fff; --muted:#6b7280; --ink:#0f172a;
+  --primary:#2563eb; --primary-600:#1d4ed8; --ring:rgba(37,99,235,.25);
+  --chip:#f3f4f6; --sale:#f43f5e; --bg:#f8fafc; --border:#e5e7eb;
+  --shadow:rgba(15,23,42,.06); --shadow-2:rgba(15,23,42,.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root{
+    --card:#0b1020; --bg:#070a14; --ink:#e5e7eb;
+    --muted:#9aa3b2; --border:#1f2a44; --chip:#111a2d;
+    --shadow:rgba(0,0,0,.35); --shadow-2:rgba(0,0,0,.5);
   }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;font-family:Poppins,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial;color:var(--ink);background:var(--bg)}
+.container{max-width:1080px;margin:0 auto;padding:24px}
 
-  async function loadFeatured(){
-    try{
-      // ambil promo aktif, prioritas oleh Web_Priority__c (sudah di-boost di backend), ambil 8 teratas
-      const r = await fetch(`/api/campaigns?status=active&sort=startDateDesc&page=1&limit=12`);
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message || 'Gagal ambil featured');
+/* Blurry page background */
+.page-bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:linear-gradient(180deg, rgba(248,250,252,.88), rgba(248,250,252,.70)),
+             url('assets/images/bg-campus.jpg') center/cover no-repeat fixed;
+  filter: blur(14px) saturate(115%) contrast(102%); transform: scale(1.04);
+}
+.site-header, main.container, .modal{position:relative; z-index:1}
 
-      // pilih 3–8 item yang punya gambar atau prioritas tinggi
-      const recs = (j.records || [])
-        .filter(x => x.imageUrl || x.priority != null)
-        .slice(0, 8);
+/* Header (glass-ready) */
+.site-header{background:linear-gradient(180deg,#fff,#f7f9ff);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+@supports (backdrop-filter: blur(6px)) {
+  .site-header{background:rgba(255,255,255,.6);backdrop-filter:saturate(140%) blur(8px)}
+}
+.site-header .container{display:flex;align-items:center;gap:24px}
+.brand{font-weight:700;text-decoration:none;color:var(--ink)}
+.nav{margin-left:auto;display:flex;gap:12px}
+.nav a{color:#374151;text-decoration:none;padding:10px 12px;border-radius:10px}
+.nav a.active,.nav a:hover{background:#eef2ff;color:#1e3a8a}
 
-      if (!recs.length) { featWrap.hidden = true; return; }
+.hero{padding:24px 0 8px}
+.hero h1{margin:0 0 6px}
+.hero p{margin:0;color:var(--muted)}
 
-      slides = recs;
-      featTrack.innerHTML = recs.map(buildSlide).join('');
-      featDots.innerHTML  = recs.map((_,i)=>`<span class="dot ${i===0?'active':''}" data-i="${i}"></span>`).join('');
-      featWrap.hidden = false;
+/* Filters */
+.filters{display:grid;grid-template-columns:1fr 180px 1fr;gap:12px;margin:16px 0 24px}
+.filters-actions{display:flex;gap:10px}
+.input{padding:12px 14px;border:1px solid var(--border);border-radius:12px;outline:none;background:#fff}
+.input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}
+@media (prefers-color-scheme: dark){
+  .input{background:#0e172a;color:var(--ink)}
+}
 
-      // bind quota for slides
-      recs.forEach(it => updateQuota(it.id));
+/* Grid & Card */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media (max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.grid{grid-template-columns:1fr}.filters{grid-template-columns:1fr;gap:10px}}
 
-      // nav
-      featPrev.onclick = ()=> go(current-1);
-      featNext.onclick = ()=> go(current+1);
-      featDots.onclick = (e)=>{
-        const t = e.target.closest('.dot'); if(!t) return;
-        go(Number(t.dataset.i));
-      };
+.card{background:var(--card);border:1px solid #eef2f7;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 30px var(--shadow);transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease}
+.card:hover{transform:translateY(-3px);box-shadow:0 18px 45px var(--shadow-2);border-color:#dfe6fb}
+.thumb{position:relative;aspect-ratio:16/9;background:#eef2f7;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.badge{background:var(--chip);color:#111827;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:600}
+.badge-sale{background:var(--sale);color:#fff}
+.badge-cat{background:var(--chip)}
+.badge-quota{background:#111827;color:#fff;opacity:.95}
 
-      // drag/swipe
-      enableDrag(featTrack);
+/* Badge wrappers (diskon kiri, kuota kanan) */
+.badges-left,.badges-right{position:absolute;top:10px;display:flex;flex-direction:column;gap:8px;z-index:2}
+.badges-left{left:10px;align-items:flex-start}
+.badges-right{right:10px;align-items:flex-end}
+.badges-left .badge,.badges-right .badge{position:relative}
 
-      // autoplay
-      startAuto();
-    }catch(e){
-      console.warn('featured error', e.message);
-      featWrap.hidden = true;
-    }
-  }
+/* Body */
+.card-body{padding:14px 16px 16px}
+.title{margin:0 0 6px 0;font-size:18px;line-height:1.4}
+.meta{font-size:12px;color:var(--muted);margin-bottom:8px}
+.desc{color:#475569;font-size:14px;min-height:42px}
 
-  function go(n){
-    if (!slides.length) return;
-    current = (n + slides.length) % slides.length;
-    featTrack.style.transform = `translateX(-${current*100}%)`;
-    $$('.dot', featDots).forEach((d,i)=> d.classList.toggle('active', i===current));
-    restartAuto();
-  }
+/* CTA & Price */
+.cta{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pricing{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.price s{opacity:.6;margin-right:6px}
+.price-final{font-weight:700}
+.status{font-size:12px;color:#64748b;background:#f1f5f9;border-radius:999px;padding:6px 10px}
 
-  function startAuto(){
-    if (autoTimer) clearInterval(autoTimer);
-    autoTimer = setInterval(()=> go(current+1), AUTO_INTERVAL);
-  }
-  function restartAuto(){ startAuto(); }
+/* Buttons */
+.btn{appearance:none;border:none;background:#e5e7eb;color:#111827;border-radius:12px;padding:10px 14px;cursor:pointer;text-decoration:none;transition:filter .18s}
+.btn:hover{filter:brightness(0.97)}
+.btn:focus-visible{outline:3px solid #93c5fd;outline-offset:2px}
+.btn:disabled,.is-disabled{opacity:.55;cursor:not-allowed}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-600)}
 
-  function enableDrag(track){
-    let startX=0, delta=0, dragging=false;
-    const onDown=(x)=>{ dragging=true; startX=x; delta=0; track.style.transition='none'; };
-    const onMove=(x)=>{ if(!dragging) return; delta = x-startX; track.style.transform = `translateX(${ -current*100 + (delta/track.clientWidth)*100 }%)`; };
-    const onUp=()=>{ if(!dragging) return; track.style.transition='transform .35s ease';
-      if (Math.abs(delta) > track.clientWidth*0.2) go(delta<0?current+1:current-1); else go(current);
-      dragging=false; delta=0;
-    };
-    track.addEventListener('mousedown', e=>onDown(e.clientX));
-    window.addEventListener('mousemove', e=>onMove(e.clientX));
-    window.addEventListener('mouseup', onUp);
-    track.addEventListener('touchstart', e=>onDown(e.touches[0].clientX), {passive:true});
-    window.addEventListener('touchmove', e=>onMove(e.touches[0].clientX), {passive:true});
-    window.addEventListener('touchend', onUp);
-  }
+/* Pager & Empty */
+.pager{display:flex;align-items:center;justify-content:center;gap:16px;margin:24px 0}
+#pageInfo{color:#6b7280}
+.msg{margin:8px 0 24px;color:#ef4444}
+.empty{padding:24px;text-align:center;color:#64748b;border:1px dashed var(--border);border-radius:12px;background:#fff}
+.empty .tips{margin-top:10px;color:#6b7280;font-size:14px}
 
-  // ===== List grid =====
-  function card(record){
-    const { id, name, description, imageUrl, startDate, endDate, status, category, price, discountPercent } = record;
-    const dateStr   = [fmtDate(startDate), fmtDate(endDate)].filter(Boolean).join(' — ');
-    const plainDesc = (description || '').replace(/<[^>]+>/g,'');
-    const desc      = plainDesc.length > 160 ? (plainDesc.slice(0,160) + '…') : plainDesc;
-    const priceStr  = price!=null ? rupiah(price) : null;
-    const discountStr = discountPercent!=null ? `${discountPercent}% OFF` : null;
-    const img       = imageUrl || 'assets/images/promo-placeholder.jpg';
+/* Featured carousel */
+.featured{margin:10px 0 18px}
+.carousel{position:relative}
+.carousel-viewport{overflow:hidden;border-radius:16px}
+.carousel-track{display:flex;gap:12px;transition:transform .35s ease;will-change:transform}
+.slide{position:relative;min-width:100%;height:280px;border-radius:16px;overflow:hidden;background:#111}
+.slide img{width:100%;height:100%;object-fit:cover;display:block;filter:contrast(1.05)}
+.slide::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(2,6,23,.7),rgba(2,6,23,.35) 45%,rgba(2,6,23,.1))}
+.slide .content{position:absolute;left:20px;bottom:18px;right:20px;z-index:2;color:#fff;display:grid;gap:8px}
+.slide .title{margin:0;font-size:22px;font-weight:700}
+.slide .meta{opacity:.9;font-size:13px}
+.slide .actions{display:flex;gap:10px;align-items:center;margin-top:6px}
+.car-btn{position:absolute;top:50%;transform:translateY(-50%);z-index:3;border:none;background:rgba(15,23,42,.6);color:#fff;width:38px;height:38px;border-radius:999px;cursor:pointer}
+.car-btn:hover{background:rgba(15,23,42,.8)}
+.car-btn.prev{left:10px}.car-btn.next{right:10px}
+.dots{display:flex;gap:6px;justify-content:center;margin-top:10px}
+.dot{width:8px;height:8px;border-radius:999px;background:#d1d5db;opacity:.8}
+.dot.active{background:#4f46e5;opacity:1}
 
-    const showStatus = status && status.toLowerCase() !== 'planned';
-    const statusHtml = showStatus
-      ? `<span class="status ${'st-' + status.toLowerCase().replace(/\s+/g,'-')}">${status}</span>`
-      : '';
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:100}
+.modal.show{display:flex}
+.modal-dialog{background:#fff;border-radius:18px;max-width:520px;width:100%;padding:20px 20px 16px;position:relative;box-shadow:0 22px 60px rgba(0,0,0,.25)}
+@supports (backdrop-filter: blur(6px)) {.modal-dialog{background:rgba(255,255,255,.72);backdrop-filter:saturate(140%) blur(10px);border: 1px solid rgba(255,255,255,.6)}}
+.modal-close{position:absolute;top:10px;right:10px;border:none;background:transparent;font-size:18px;cursor:pointer}
+.form-row{display:flex;flex-direction:column;margin:10px 0}
+.form-row label{font-size:13px;margin-bottom:6px;color:#111827}
+.phone-input{display:flex;align-items:center}
+.phone-input .prefix{background:#f3f4f6;border:1px solid var(--border);border-right:none;border-radius:8px 0 0 8px;padding:12px 10px}
+.phone-input .phone-suffix{border-radius:0 8px 8px 0}
+.help{font-size:12px;color:#6b7280}
+.help.error{color:#ef4444}
 
-    return `
-    <article class="card" data-campaign="${id}">
-      <div class="thumb">
-        <img src="${img}" alt="${name}">
-        ${discountStr ? `<span class="badge badge-sale">${discountStr}</span>` : ''}
-        ${category ? `<span class="badge badge-cat">${category}</span>` : ''}
-        <span class="badge badge-quota" data-quota-for="${id}" hidden>Kuota: …</span>
-      </div>
-      <div class="card-body">
-        <h3 class="title">${name}</h3>
-        ${dateStr ? `<div class="meta">${dateStr}</div>` : ''}
-        <p class="desc">${desc || ''}</p>
-
-        <div class="cta">
-          <div class="pricing">
-            ${priceStr ? `<span class="price">${priceStr}</span>` : ''}
-            ${statusHtml}
-          </div>
-          <div class="actions">
-            <button class="btn btn-primary" type="button" data-register data-campaign="${id}" data-name="${name}">Daftar Promo</button>
-          </div>
-        </div>
-      </div>
-    </article>`;
-  }
-
-  async function load(){
-    msgEl.textContent = "Memuat promo…";
-    grid.innerHTML = `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
-                      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
-    prevBtn.disabled = true; nextBtn.disabled = true;
-
-    const params = new URLSearchParams({
-      q: state.q, status: state.status, sort: state.sort,
-      page: String(state.page), limit: String(state.limit)
-    });
-
-    try {
-      const r = await fetch(`/api/campaigns?${params}`);
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message || "Gagal mengambil data");
-
-      state.total = j.total || 0;
-      const items = j.records || [];
-      grid.innerHTML = items.length ? items.map(card).join("") : `<div class="empty">Belum ada promo untuk filter ini.</div>`;
-
-      const maxPage = Math.max(1, Math.ceil(state.total / state.limit));
-      pageInfo.textContent = `Halaman ${state.page} dari ${maxPage}`;
-      prevBtn.disabled = state.page <= 1;
-      nextBtn.disabled = state.page >= maxPage || !j.hasMore;
-
-      msgEl.textContent = "";
-
-      items.forEach(it => updateQuota(it.id));
-      startQuotaAutoRefresh();
-    } catch (e) {
-      console.error(e);
-      msgEl.textContent = e.message || "Terjadi kesalahan memuat promo.";
-      grid.innerHTML = `<div class="empty">Gagal memuat data.</div>`;
-    }
-  }
-
-  async function updateQuota(campaignId){
-    const badge = document.querySelector(`[data-quota-for="${campaignId}"]`);
-    const card  = document.querySelector(`.card[data-campaign="${campaignId}"]`) || document.querySelector(`.slide[data-campaign="${campaignId}"]`);
-    const btn   = card?.querySelector('[data-register]');
-    if (!badge) return;
-
-    try {
-      const r = await fetch(`/api/campaign-stats?campaignId=${encodeURIComponent(campaignId)}`);
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message || "Gagal ambil kuota");
-
-      if (j.quota == null) { badge.hidden = true; return; }
-
-      const txt = (j.remaining ?? null) != null
-        ? (j.remaining > 0 ? `Kuota tersisa: ${j.remaining}` : `Kuota penuh`)
-        : `Kuota: ${j.quota}`;
-
-      badge.textContent = txt;
-      badge.hidden = false;
-
-      if (j.remaining !== null && j.remaining <= 0) {
-        btn?.setAttribute('disabled','disabled'); btn?.classList.add('is-disabled');
-      } else {
-        btn?.removeAttribute('disabled'); btn?.classList.remove('is-disabled');
-      }
-    } catch (e) {
-      console.warn('quota error', e.message);
-    }
-  }
-
-  let quotaTimer = null;
-  function startQuotaAutoRefresh(){
-    if (quotaTimer) clearInterval(quotaTimer);
-    quotaTimer = setInterval(()=>{
-      $$('.card[data-campaign], .slide[data-campaign]').forEach(el=>{
-        const id = el.getAttribute('data-campaign');
-        updateQuota(id);
-      });
-    }, 30000);
-  }
-
-  // filters & paging
-  let t;
-  qEl.addEventListener('input', ()=>{
-    clearTimeout(t);
-    t = setTimeout(()=>{ state.q = qEl.value.trim(); state.page = 1; load(); }, 300);
-  });
-  statusEl.addEventListener('change', ()=>{ state.status = statusEl.value; state.page=1; load(); });
-  sortEl.addEventListener('change',   ()=>{ state.sort   = sortEl.value;   state.page=1; load(); });
-  prevBtn.addEventListener('click',   ()=>{ if (state.page>1){ state.page--; load(); }});
-  nextBtn.addEventListener('click',   ()=>{ state.page++; load(); });
-
-  // modal daftar promo (Lead)
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-register]');
-    if (!btn) return;
-    openRegisterModal({ campaignId: btn.dataset.campaign, campaignName: btn.dataset.name });
-  });
-
-  function openRegisterModal({ campaignId, campaignName }){
-    const m = document.getElementById('interestModal');
-    m.querySelector('[data-campaign-name]').textContent = campaignName || 'Campaign';
-    m.querySelector('#interest_campaignId').value = campaignId;
-    m.classList.add('show');
-    m.querySelector('#interest_firstName').focus();
-  }
-
-  $('#interest_close').addEventListener('click', ()=>{
-    $('#interestModal').classList.remove('show');
-  });
-
-  $('#interest_phone').addEventListener('input', (e)=>{
-    e.target.value = e.target.value.replace(/\D/g,'');
-  });
-
-  $('#interest_form').addEventListener('submit', async (ev)=>{
-    ev.preventDefault();
-    const firstName = $('#interest_firstName').value.trim();
-    const lastName  = $('#interest_lastName').value.trim();
-    const email     = $('#interest_email').value.trim();
-    const phoneRaw  = $('#interest_phone').value.trim();
-    const campaignId= $('#interest_campaignId').value;
-
-    if (!firstName || !lastName || !email){
-      Swal.fire({icon:'warning', title:'Lengkapi data', text:'Nama & email wajib diisi.'});
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase())){
-      Swal.fire({icon:'warning', title:'Email tidak valid', text:'Periksa kembali format email.'});
-      return;
-    }
-
-    let s = phoneRaw.replace(/\D/g,'');
-    if (s.startsWith('0')) s = s.slice(1);
-    const phone = s ? `+62${s}` : null;
-
-    const payload = {
-      firstName, lastName, email, phone, campaignId,
-      leadSource:'Promo Page', leadStatus:'Open - Not Contacted', campaignMemberStatus:'Responded'
-    };
-
-    try {
-      submitBtn.disabled = true; submitBtn.textContent = 'Mengirim…';
-
-      const r = await fetch('/api/lead-interest', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      });
-
-      const ct = r.headers.get('content-type') || '';
-      const data = ct.includes('application/json') ? await r.json() : { message: await r.text() };
-
-      if (!r.ok) throw new Error(data.message || 'Gagal menyimpan pendaftaran');
-
-      if (data.alreadyRegistered) {
-        await Swal.fire({icon:'info', title:'Anda sudah terdaftar', text:'Data Anda sudah tercatat pada promo ini.'});
-      } else {
-        await Swal.fire({icon:'success', title:'Pendaftaran berhasil', text:'Terima kasih! Pendaftaran promo Anda diterima.'});
-      }
-
-      updateQuota(campaignId);
-      $('#interestModal').classList.remove('show');
-      $('#interest_form').reset();
-
-    } catch (e) {
-      console.error(e);
-      Swal.fire({icon:'error', title:'Gagal', text: e.message || 'Terjadi kesalahan. Coba lagi.'});
-    } finally {
-      submitBtn.disabled = false; submitBtn.textContent = 'Kirim';
-    }
-  });
-
-  // init
-  loadFeatured();   // <<=== barisan baru
-  load();
-})();
+/* Skeleton */
+.skeleton{height:320px;border-radius:16px;background:linear-gradient(90deg,#eef2f7 25%,#f3f5fb 37%,#eef2f7 63%);background-size:400% 100%;animation:shimmer 1.1s infinite linear}
+@keyframes shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}

@@ -9,38 +9,27 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <link rel="stylesheet" href="css/promos.css" />
-  <link rel="stylesheet" href="css/main.css">
-  <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
   <!-- Blurry background layer -->
   <div class="page-bg" aria-hidden="true"></div>
 
-  <!-- Navbar inline (match index) -->
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-logo">
-                <img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University Logo" class="logo">
-                <span>Metro Seven</span>
-            </div>
-            <ul class="nav-menu">
-                <li class="nav-item"><a href="#home" class="nav-link">Beranda</a></li>
-                <li class="nav-item"><a href="#programs" class="nav-link">Program</a></li>
-                <li class="nav-item"><a href="#testimonials" class="nav-link">Testimoni</a></li>
-                <li class="nav-item"><a href="#contact" class="nav-link">Kontak</a></li>
-            </ul>
-            <div class="nav-cta">
-                 <a href="register.html" target="_blank" class="btn btn-primary">Register</a>
-            </div>
-            <div class="hamburger">
-                <span class="bar"></span><span class="bar"></span><span class="bar"></span>
-            </div>
-        </div>
-    </nav>
+  <!-- Navbar inline (mirip index) -->
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="index.html">Metro Seven University</a>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="register.html">Register</a>
+        <a class="active" href="promos.html" aria-current="page">Promo</a>
+      </nav>
+    </div>
+  </header>
 
   <main class="container">
     <section class="hero">
-      <h1>Promo Metro Seven University</h1>
+      <h1>Promo & Bootcamp</h1>
+      <p>Temukan promo aktif. Kuota real-time. Klik “Daftar Promo” untuk mendaftar (Lead + CampaignMember).</p>
     </section>
 
     <!-- Featured Carousel -->
@@ -55,20 +44,17 @@
       <div class="dots" id="featDots" aria-hidden="true"></div>
     </section>
 
-    <!-- Filters + Share -->
+    <!-- Filters (q + status + kategori dinamis + bagikan) -->
     <section class="filters">
       <input id="q" class="input" placeholder="Cari promo / deskripsi…" />
       <select id="status" class="input" aria-label="Status">
-        <option value="active" selected>Aktif</option>
-        <option value="upcoming">Akan Datang</option>
-        <option value="past">Selesai</option>
         <option value="all">Semua</option>
+        <option value="active" selected>Aktif</option>
+        <option value="past">Selesai</option>
       </select>
       <div class="filters-actions">
-        <select id="sort" class="input" aria-label="Urutkan">
-          <option value="startDateDesc">Terbaru (Mulai)</option>
-          <option value="startDateAsc">Terdekat (Mulai)</option>
-          <option value="createdDesc">Terbaru (Dibuat)</option>
+        <select id="category" class="input" aria-label="Kategori">
+          <option value="all" selected>Semua Kategori</option>
         </select>
         <button id="share" class="btn" type="button" aria-label="Bagikan filter">Bagikan</button>
       </div>

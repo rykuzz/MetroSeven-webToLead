@@ -6,7 +6,7 @@
   const grid     = $("#grid");
   const qEl      = $("#q");
   const statusEl = $("#status");
-  const sortEl   = $("#sort");
+  const categoryEl = $("#category");
   const shareBtn = $("#share");
   const msgEl    = $("#msg");
   const prevBtn  = $("#prev");
@@ -21,25 +21,26 @@
   const featPrev = $("#featPrev");
   const featNext = $("#featNext");
 
-  // state (hydrate from URL)
-  let state = { q:"", status:"active", sort:"startDateDesc", page:1, limit:12, total:0 };
+  // state (no "sort" anymore)
+  let state = { q:"", status:"active", category:"all", page:1, limit:12, total:0 };
+
+  // hydrate from URL
   try {
     const usp = new URLSearchParams(location.search);
     if (usp.has('q')) state.q = qEl.value = usp.get('q') || "";
     if (usp.has('status')) state.status = statusEl.value = usp.get('status') || "active";
-    if (usp.has('sort')) state.sort = sortEl.value = usp.get('sort') || "startDateDesc";
+    if (usp.has('category')) state.category = categoryEl.value = usp.get('category') || "all";
     if (usp.has('page')) state.page = Math.max(1, parseInt(usp.get('page')||'1',10));
   } catch {}
 
   const rupiah  = v => v==null ? null : new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(v);
   const fmtDate = d => d ? new Date(d).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : null;
 
-  // ===== helpers =====
   function setUrlFromState(){
     const usp = new URLSearchParams({
       ...(state.q ? {q:state.q} : {}),
       status: state.status,
-      sort: state.sort,
+      ...(state.category && state.category !== 'all' ? {category: state.category} : {}),
       page: String(state.page)
     });
     history.replaceState(null, "", `${location.pathname}?${usp.toString()}`);
@@ -66,12 +67,11 @@
     return null;
   }
 
-  // ===== Featured Carousel =====
+  // ===== Featured Carousel (tanpa perubahan logika trigger) =====
   let slides = [];
   let current = 0;
   let autoTimer = null;
   const AUTO_INTERVAL = 5000;
-  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function buildSlide(rec){
     const img = rec.imageUrl || 'assets/images/promo-placeholder.jpg';
@@ -106,7 +106,7 @@
 
   async function loadFeatured(){
     try{
-      const r = await fetch(`/api/campaigns?status=active&sort=startDateDesc&page=1&limit=12`, { cache:'no-store' });
+      const r = await fetch(`/api/campaigns?status=active&page=1&limit=12`, { cache:'no-store' });
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || 'Gagal ambil featured');
 
@@ -121,30 +121,20 @@
       featDots.innerHTML  = recs.map((_,i)=>`<button class="dot ${i===0?'active':''}" data-i="${i}" aria-label="Slide ${i+1}"></button>`).join('');
       featWrap.hidden = false;
 
-      // observe quota for visible slides
       recs.forEach(it => observeQuotaForId(it.id));
 
-      // nav
       featPrev.onclick = ()=> go(current-1);
       featNext.onclick = ()=> go(current+1);
       featDots.onclick = (e)=>{ const t = e.target.closest('.dot'); if(!t) return; go(Number(t.dataset.i)); };
 
-      // keyboard navigation
       featTrack.addEventListener('keydown', (e)=>{
         if (e.key === 'ArrowLeft') go(current-1);
         if (e.key === 'ArrowRight') go(current+1);
       });
 
-      // autoplay
-      if (!reduceMotion) startAuto();
-
-      // pause on hover/focus
+      startAuto();
       featTrack.addEventListener('mouseenter', stopAuto);
       featTrack.addEventListener('mouseleave', startAuto);
-      featTrack.addEventListener('focusin', stopAuto);
-      featTrack.addEventListener('focusout', startAuto);
-
-      // drag/swipe
       enableDrag(featTrack);
     }catch(e){ console.warn('featured error', e.message); featWrap.hidden = true; }
   }
@@ -157,7 +147,7 @@
   }
   function startAuto(){ stopAuto(); autoTimer = setInterval(()=> go(current+1), AUTO_INTERVAL); }
   function stopAuto(){ if (autoTimer) clearInterval(autoTimer); autoTimer = null; }
-  function restartAuto(){ if (!reduceMotion) startAuto(); }
+  function restartAuto(){ startAuto(); }
   function enableDrag(track){
     let startX=0, delta=0, dragging=false;
     const onDown=(x)=>{ dragging=true; startX=x; delta=0; track.style.transition='none'; };
@@ -239,7 +229,8 @@
     prevBtn.disabled = true; nextBtn.disabled = true;
 
     const params = new URLSearchParams({
-      q: state.q, status: state.status, sort: state.sort,
+      q: state.q, status: state.status,
+      ...(state.category && state.category !== 'all' ? { category: state.category } : {}),
       page: String(state.page), limit: String(state.limit)
     });
 
@@ -254,7 +245,7 @@
       grid.innerHTML = items.length
         ? items.map(card).join("")
         : `<div class="empty">Belum ada promo untuk filter ini.
-             <div class="tips">Coba ubah kata kunci, ganti status, atau
+             <div class="tips">Coba ubah kata kunci, ganti status/kategori, atau
                <button id="resetFilters" class="btn" type="button">Reset filter</button>
              </div>
            </div>`;
@@ -262,8 +253,8 @@
       if (!items.length) {
         const btnReset = $("#resetFilters");
         if (btnReset) btnReset.onclick = () => {
-          qEl.value=''; statusEl.value='active'; sortEl.value='startDateDesc';
-          state = { q:"", status:"active", sort:"startDateDesc", page:1, limit:12, total:0 };
+          qEl.value=''; statusEl.value='active'; categoryEl.value='all';
+          state = { q:"", status:"active", category:"all", page:1, limit:12, total:0 };
           load();
         };
       }
@@ -274,8 +265,6 @@
       nextBtn.disabled = state.page >= maxPage || !j.hasMore;
 
       msgEl.textContent = "";
-
-      // observe quota only for visible elements
       items.forEach(it => observeQuotaForId(it.id));
 
     } catch (e) {
@@ -306,7 +295,6 @@
     if (el) io.observe(el);
   }
 
-  // periodic refresh only for visible
   setInterval(()=>{ visibleIds.forEach(id => updateQuota(id)); }, 30000);
 
   async function updateQuota(campaignId){
@@ -344,12 +332,12 @@
     t = setTimeout(()=>{ state.q = qEl.value.trim(); state.page = 1; load(); }, 300);
   });
   statusEl.addEventListener('change', ()=>{ state.status = statusEl.value; state.page=1; load(); });
-  sortEl.addEventListener('change',   ()=>{ state.sort   = sortEl.value;   state.page=1; load(); });
+  categoryEl.addEventListener('change', ()=>{ state.category = categoryEl.value; state.page=1; load(); });
   prevBtn.addEventListener('click',   ()=>{ if (state.page>1){ state.page--; load(); }});
   nextBtn.addEventListener('click',   ()=>{ state.page++; load(); });
   shareBtn.addEventListener('click',  copyCurrentUrl);
 
-  // modal daftar promo
+  // modal daftar promo (tetap)
   let lastFocus = null;
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-register]');
@@ -365,7 +353,7 @@
     m.classList.add('show');
     trapFocus(m);
     $('#interest_firstName').focus();
-    stopAuto(); // pause carousel autoplay
+    stopAuto();
   }
 
   $('#interest_close').addEventListener('click', closeModal);
@@ -374,20 +362,17 @@
     m.classList.remove('show');
     releaseFocus();
     if (lastFocus) lastFocus.focus();
-    restartAuto();
+    startAuto();
   }
 
-  // ESC close
   document.addEventListener('keydown', (e)=>{
     if (e.key === 'Escape' && $('#interestModal').classList.contains('show')) closeModal();
   });
 
-  // digits-only phone
   $('#interest_phone').addEventListener('input', (e)=>{
     e.target.value = e.target.value.replace(/\D/g,'');
   });
 
-  // a11y: toggle aria-invalid
   function setInvalid(input, msg){
     const err = $('#email_error');
     if (msg) {
@@ -470,8 +455,19 @@
   }
   function releaseFocus(){ focusTrapRemovers.forEach(fn=>fn()); focusTrapRemovers=[]; }
 
-  // init
+  // Load kategori dinamis, lalu featured & list
   (async function init(){
+    try{
+      const r = await fetch('/api/campaign-categories', { cache:'no-store' });
+      const j = await r.json();
+      if (r.ok && Array.isArray(j.values)){
+        const opts = ['<option value="all">Semua Kategori</option>']
+          .concat(j.values.map(v => `<option value="${String(v.value).replace(/"/g,'&quot;')}">${v.label}</option>`));
+        categoryEl.innerHTML = opts.join('');
+        // if URL had category, re-apply
+        categoryEl.value = state.category;
+      }
+    }catch(e){ console.warn('Gagal memuat kategori', e.message); }
     await loadFeatured();
     await load();
   })();

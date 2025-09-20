@@ -4,9 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Promo & Bootcamp — Metro Seven University</title>
-  <meta name="description" content="Promo & bootcamp aktif. Daftar promo atau daftar umum terhubung ke Campaign Salesforce." />
+  <meta name="description" content="Promo & bootcamp aktif. Daftar promo terhubung ke Campaign Salesforce." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
+  <!-- SweetAlert2 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <link rel="stylesheet" href="css/promos.css" />
 </head>
 <body>
@@ -24,7 +26,19 @@
   <main class="container">
     <section class="hero">
       <h1>Promo & Bootcamp</h1>
-      <p>Temukan promo aktif. Kuota real-time. Klik “Daftar Promo” untuk mendaftar (Lead + CampaignMember), atau “Daftar Umum” untuk jalur Opportunity.</p>
+      <p>Temukan promo aktif. Kuota real-time. Klik “Daftar Promo” untuk mendaftar (Lead + CampaignMember).</p>
+    </section>
+
+    <!-- ===== Promo Carousel (baru) ===== -->
+    <section id="featured" class="featured" aria-label="Promo unggulan" hidden>
+      <div class="carousel">
+        <button class="car-btn prev" id="featPrev" aria-label="Sebelumnya">‹</button>
+        <div class="carousel-viewport">
+          <div class="carousel-track" id="featTrack" role="listbox" aria-live="polite"></div>
+        </div>
+        <button class="car-btn next" id="featNext" aria-label="Selanjutnya">›</button>
+      </div>
+      <div class="dots" id="featDots" aria-hidden="true"></div>
     </section>
 
     <section class="filters">
@@ -42,7 +56,10 @@
       </select>
     </section>
 
-    <section id="grid" class="grid" aria-live="polite"></section>
+    <section id="grid" class="grid" aria-live="polite">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </section>
 
     <nav id="pager" class="pager">
       <button id="prev" class="btn" disabled>← Sebelumnya</button>
@@ -53,16 +70,15 @@
     <p id="msg" class="msg" aria-live="polite"></p>
   </main>
 
-  <!-- Modal Daftar Promo (Lead + CampaignMember) -->
+  <!-- Modal Daftar Promo -->
   <div id="interestModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
     <div class="modal-dialog">
       <button id="interest_close" class="modal-close" aria-label="Tutup">✕</button>
       <h3>Daftar Promo: <span data-campaign-name>Campaign</span></h3>
       <p>Isi data singkat di bawah ini. Kami akan menghubungi Anda.</p>
 
-      <form id="interest_form">
+      <form id="interest_form" novalidate>
         <input type="hidden" id="interest_campaignId" />
-
         <div class="form-row">
           <label for="interest_firstName">Nama Depan *</label>
           <input id="interest_firstName" class="input" placeholder="Contoh: Budi" required />
@@ -79,16 +95,16 @@
           <label for="interest_phone">No. HP</label>
           <div class="phone-input">
             <span class="prefix">+62</span>
-            <input id="interest_phone" class="input phone-suffix" type="tel" placeholder="81234567890" />
+            <input id="interest_phone" class="input phone-suffix" type="tel" inputmode="numeric" placeholder="81234567890" />
           </div>
         </div>
-
-        <button class="btn btn-primary" type="submit">Kirim</button>
+        <button id="interest_submit" class="btn btn-primary" type="submit">Kirim</button>
         <p id="interest_msg" class="msg" aria-live="polite"></p>
       </form>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="js/promos.js"></script>
 </body>
 </html>

@@ -457,7 +457,7 @@
 
     const payload = {
       firstName, lastName, email, phone, company, campaignId,
-      leadSource:'Promo Page', leadStatus:'Open - Not Contacted', campaignMemberStatus:'Responded'
+      leadSource:'Promo Page', leadStatus:'New', campaignMemberStatus:'Responded'
     };
 
     try {
@@ -526,3 +526,4 @@
     validateForm(); // set initial state tombol
   })();
 })();
+

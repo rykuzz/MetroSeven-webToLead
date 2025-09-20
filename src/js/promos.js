@@ -3,25 +3,25 @@
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
   // elements
-  const grid     = $("#grid");
-  const qEl      = $("#q");
-  const statusEl = $("#status");
+  const grid       = $("#grid");
+  const qEl        = $("#q");
+  const statusEl   = $("#status");
   const categoryEl = $("#category");
-  const shareBtn = $("#share");
-  const msgEl    = $("#msg");
-  const prevBtn  = $("#prev");
-  const nextBtn  = $("#next");
-  const pageInfo = $("#pageInfo");
-  const submitBtn= $("#interest_submit");
+  const shareBtn   = $("#share");
+  const msgEl      = $("#msg");
+  const prevBtn    = $("#prev");
+  const nextBtn    = $("#next");
+  const pageInfo   = $("#pageInfo");
+  const submitBtn  = $("#interest_submit");
 
   // featured
-  const featWrap = $("#featured");
-  const featTrack= $("#featTrack");
-  const featDots = $("#featDots");
-  const featPrev = $("#featPrev");
-  const featNext = $("#featNext");
+  const featWrap  = $("#featured");
+  const featTrack = $("#featTrack");
+  const featDots  = $("#featDots");
+  const featPrev  = $("#featPrev");
+  const featNext  = $("#featNext");
 
-  // state (no "sort" anymore)
+  // state (no "sort")
   let state = { q:"", status:"active", category:"all", page:1, limit:12, total:0 };
 
   // hydrate from URL
@@ -67,7 +67,7 @@
     return null;
   }
 
-  // ===== Featured Carousel (tanpa perubahan logika trigger) =====
+  // ===== Featured Carousel =====
   let slides = [];
   let current = 0;
   let autoTimer = null;
@@ -297,6 +297,7 @@
 
   setInterval(()=>{ visibleIds.forEach(id => updateQuota(id)); }, 30000);
 
+  // === PERBAIKAN: selalu tampilkan badge; disable tombol bila penuh ===
   async function updateQuota(campaignId){
     const badge = document.querySelector(`[data-quota-for="${campaignId}"]`);
     const holder= document.querySelector(`.card[data-campaign="${campaignId}"]`) || document.querySelector(`.slide[data-campaign="${campaignId}"]`);
@@ -308,21 +309,31 @@
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || "Gagal ambil kuota");
 
-      if (j.quota == null) { badge.hidden = true; return; }
+      let text;
+      if (j.quota != null) {
+        const used = j.used || 0;
+        const rem  = (j.remaining != null) ? j.remaining : Math.max(0, j.quota - used);
+        text = rem > 0 ? `Sisa: ${rem} (${used}/${j.quota})` : `Kuota penuh (${used}/${j.quota})`;
+        if (rem <= 0) {
+          btn?.setAttribute('disabled','disabled'); btn?.classList.add('is-disabled');
+          if (btn) btn.textContent = 'Kuota Penuh';
+        } else {
+          btn?.removeAttribute('disabled'); btn?.classList.remove('is-disabled');
+          if (btn) btn.textContent = 'Daftar Promo';
+        }
+      } else {
+        const used = j.used || 0;
+        text = `Pendaftar: ${used}`;
+        btn?.removeAttribute('disabled'); btn?.classList.remove('is-disabled');
+        if (btn) btn.textContent = 'Daftar Promo';
+      }
 
-      const txt = (j.remaining ?? null) != null
-        ? (j.remaining > 0 ? `Kuota tersisa: ${j.remaining}` : `Kuota penuh`)
-        : `Kuota: ${j.quota}`;
-
-      badge.textContent = txt;
+      badge.textContent = text;
       badge.hidden = false;
 
-      if (j.remaining !== null && j.remaining <= 0) {
-        btn?.setAttribute('disabled','disabled'); btn?.classList.add('is-disabled'); btn.textContent = 'Kuota Penuh';
-      } else {
-        btn?.removeAttribute('disabled'); btn?.classList.remove('is-disabled'); btn.textContent = 'Daftar Promo';
-      }
-    } catch (e) { console.warn('quota error', e.message); }
+    } catch (e) {
+      console.warn('quota error', e.message);
+    }
   }
 
   // filters & paging
@@ -331,13 +342,13 @@
     clearTimeout(t);
     t = setTimeout(()=>{ state.q = qEl.value.trim(); state.page = 1; load(); }, 300);
   });
-  statusEl.addEventListener('change', ()=>{ state.status = statusEl.value; state.page=1; load(); });
+  statusEl.addEventListener('change',   ()=>{ state.status   = statusEl.value;   state.page=1; load(); });
   categoryEl.addEventListener('change', ()=>{ state.category = categoryEl.value; state.page=1; load(); });
-  prevBtn.addEventListener('click',   ()=>{ if (state.page>1){ state.page--; load(); }});
-  nextBtn.addEventListener('click',   ()=>{ state.page++; load(); });
-  shareBtn.addEventListener('click',  copyCurrentUrl);
+  prevBtn.addEventListener('click',     ()=>{ if (state.page>1){ state.page--; load(); }});
+  nextBtn.addEventListener('click',     ()=>{ state.page++; load(); });
+  shareBtn.addEventListener('click',    copyCurrentUrl);
 
-  // modal daftar promo (tetap)
+  // modal daftar promo
   let lastFocus = null;
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-register]');
@@ -464,7 +475,6 @@
         const opts = ['<option value="all">Semua Kategori</option>']
           .concat(j.values.map(v => `<option value="${String(v.value).replace(/"/g,'&quot;')}">${v.label}</option>`));
         categoryEl.innerHTML = opts.join('');
-        // if URL had category, re-apply
         categoryEl.value = state.category;
       }
     }catch(e){ console.warn('Gagal memuat kategori', e.message); }

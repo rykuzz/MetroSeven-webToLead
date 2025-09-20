@@ -21,7 +21,7 @@
   const featPrev  = $("#featPrev");
   const featNext  = $("#featNext");
 
-  // state (no "sort")
+  // state (no sort)
   let state = { q:"", status:"active", category:"all", page:1, limit:12, total:0 };
 
   // hydrate from URL
@@ -51,7 +51,7 @@
       .catch(() => Swal.fire({icon:'error', title:'Gagal menyalin'}));
   }
 
-  // email validation (strict)
+  // ===== Validation helpers =====
   function validateEmailStrict(email) {
     const e = String(email || '').trim();
     const basic = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -64,6 +64,30 @@
     if (!tld || tld.length < 2) return 'TLD domain terlalu pendek.';
     const disposable = new Set(['mailinator.com','yopmail.com','10minutemail.com','guerrillamail.com','temp-mail.org','tempmail.com','trashmail.com','sharklasers.com']);
     if (disposable.has(domain.toLowerCase())) return 'Gunakan email aktif (bukan email sementara/disposable).';
+    return null;
+  }
+  function setFieldState(input, msgEl, msg){
+    if (msg){
+      input.classList.add('error');
+      msgEl.textContent = msg;
+      msgEl.hidden = false;
+    }else{
+      input.classList.remove('error');
+      msgEl.hidden = true;
+      msgEl.textContent = '';
+    }
+  }
+  function validateName(value, label){
+    const v = String(value||'').trim();
+    if (v.length < 2) return `${label} minimal 2 karakter.`;
+    if (!/^[A-Za-zÀ-ÖØ-öø-ÿ' -]+$/.test(v)) return `${label} hanya huruf/karakter nama.`;
+    return null;
+  }
+  function validatePhoneLocal(value){
+    const s = String(value||'').replace(/\D/g,'');
+    if (!s) return null; // opsional
+    if (s.startsWith('0')) return 'Tulis tanpa 0 di depan (gunakan format 812…).';
+    if (s.length < 9 || s.length > 13) return 'No. HP 9–13 digit.';
     return null;
   }
 
@@ -81,9 +105,7 @@
 
     return `
     <div class="slide" data-campaign="${rec.id}" role="option" aria-label="${rec.name}" tabindex="0">
-      <img src="${img}" alt="${rec.name}"
-           loading="lazy" decoding="async" width="1280" height="720"
-           srcset="${img} 1280w" sizes="100vw">
+      <img src="${img}" alt="${rec.name}" loading="lazy" decoding="async" width="1280" height="720">
       <div class="badges-left">
         ${discountStr ? `<span class="badge badge-sale">${discountStr}</span>` : ''}
         ${rec.category ? `<span class="badge badge-cat">${rec.category}</span>` : ''}
@@ -297,7 +319,7 @@
 
   setInterval(()=>{ visibleIds.forEach(id => updateQuota(id)); }, 30000);
 
-  // === PERBAIKAN: selalu tampilkan badge; disable tombol bila penuh ===
+  // === Kuota: tampilkan selalu; disable tombol jika penuh ===
   async function updateQuota(campaignId){
     const badge = document.querySelector(`[data-quota-for="${campaignId}"]`);
     const holder= document.querySelector(`.card[data-campaign="${campaignId}"]`) || document.querySelector(`.slide[data-campaign="${campaignId}"]`);
@@ -384,32 +406,50 @@
     e.target.value = e.target.value.replace(/\D/g,'');
   });
 
-  function setInvalid(input, msg){
-    const err = $('#email_error');
-    if (msg) {
-      input.setAttribute('aria-invalid','true');
-      err.hidden = false; err.textContent = msg;
-    } else {
-      input.removeAttribute('aria-invalid');
-      err.hidden = true; err.textContent = '';
-    }
-  }
+  // realtime validation binding
+  const firstNameEl = document.getElementById('interest_firstName');
+  const lastNameEl  = document.getElementById('interest_lastName');
+  const emailEl     = document.getElementById('interest_email');
+  const phoneEl     = document.getElementById('interest_phone');
 
-  $('#interest_form').addEventListener('submit', async (ev)=>{
+  const fnMsg = document.getElementById('firstName_msg');
+  const lnMsg = document.getElementById('lastName_msg');
+  const emMsg = document.getElementById('email_error');
+  const phMsg = document.getElementById('phone_msg');
+
+  function validateForm(){
+    const e1 = validateName(firstNameEl.value,'Nama depan');
+    const e2 = validateName(lastNameEl.value ,'Nama belakang');
+    const e3 = validateEmailStrict(emailEl.value);
+    const e4 = validatePhoneLocal(phoneEl.value);
+
+    setFieldState(firstNameEl, fnMsg, e1);
+    setFieldState(lastNameEl , lnMsg, e2);
+    setFieldState(emailEl    , emMsg, e3);
+    setFieldState(phoneEl    , phMsg, e4);
+
+    const ok = !e1 && !e2 && !e3 && !e4;
+    submitBtn.disabled = !ok;
+    return ok;
+  }
+  [firstNameEl, lastNameEl, emailEl, phoneEl].forEach(el=>{
+    el.addEventListener('input', validateForm);
+  });
+
+  // submit
+  document.getElementById('interest_form').addEventListener('submit', async (ev)=>{
     ev.preventDefault();
+    if (!validateForm()){
+      Swal.fire({icon:'warning', title:'Lengkapi data', text:'Periksa kembali kolom yang bertanda merah.'});
+      return;
+    }
+
     const firstName = $('#interest_firstName').value.trim();
     const lastName  = $('#interest_lastName').value.trim();
     const email     = $('#interest_email').value.trim();
     const company   = $('#interest_company').value.trim();
     const phoneRaw  = $('#interest_phone').value.trim();
     const campaignId= $('#interest_campaignId').value;
-
-    if (!firstName || !lastName || !email){
-      Swal.fire({icon:'warning', title:'Lengkapi data', text:'Nama & email wajib diisi.'}); return;
-    }
-    const emailErr = validateEmailStrict(email);
-    setInvalid($('#interest_email'), emailErr);
-    if (emailErr){ Swal.fire({icon:'warning', title:'Email tidak valid', text: emailErr}); return; }
 
     let s = phoneRaw.replace(/\D/g,'');
     if (s.startsWith('0')) s = s.slice(1);
@@ -421,7 +461,8 @@
     };
 
     try {
-      submitBtn.disabled = true; submitBtn.textContent = 'Mengirim…';
+      submitBtn.disabled = true; submitBtn.classList.add('is-loading'); submitBtn.textContent = 'Mengirim…';
+
       const r = await fetch('/api/lead-interest', {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
       });
@@ -438,12 +479,14 @@
       updateQuota(campaignId);
       closeModal();
       $('#interest_form').reset();
+      validateForm();
 
     } catch (e) {
       console.error(e);
       Swal.fire({icon:'error', title:'Gagal', text: e.message || 'Terjadi kesalahan. Coba lagi.'});
     } finally {
-      submitBtn.disabled = false; submitBtn.textContent = 'Kirim';
+      submitBtn.classList.remove('is-loading'); submitBtn.textContent = 'Kirim';
+      submitBtn.disabled = !validateForm();
     }
   });
 
@@ -466,7 +509,7 @@
   }
   function releaseFocus(){ focusTrapRemovers.forEach(fn=>fn()); focusTrapRemovers=[]; }
 
-  // Load kategori dinamis, lalu featured & list
+  // init: kategori dinamis + featured + list
   (async function init(){
     try{
       const r = await fetch('/api/campaign-categories', { cache:'no-store' });
@@ -480,5 +523,6 @@
     }catch(e){ console.warn('Gagal memuat kategori', e.message); }
     await loadFeatured();
     await load();
+    validateForm(); // set initial state tombol
   })();
 })();

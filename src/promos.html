@@ -14,7 +14,7 @@
   <!-- Blurry background layer -->
   <div class="page-bg" aria-hidden="true"></div>
 
-  <!-- Navbar inline (mirip index) -->
+  <!-- Navbar inline -->
   <header class="site-header">
     <div class="container">
       <a class="brand" href="index.html">Metro Seven University</a>
@@ -44,7 +44,7 @@
       <div class="dots" id="featDots" aria-hidden="true"></div>
     </section>
 
-    <!-- Filters (q + status + kategori dinamis + bagikan) -->
+    <!-- Filters -->
     <section class="filters">
       <input id="q" class="input" placeholder="Cari promo / deskripsi…" />
       <select id="status" class="input" aria-label="Status">
@@ -74,40 +74,56 @@
     <p id="msg" class="msg" role="status" aria-live="polite"></p>
   </main>
 
-  <!-- Modal Daftar Promo -->
+  <!-- Modal Daftar Promo (Improved UI/UX) -->
   <div id="interestModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="interest_title">
     <div class="modal-dialog" role="document">
       <button id="interest_close" class="modal-close" aria-label="Tutup">✕</button>
+
       <h3 id="interest_title">Daftar Promo: <span data-campaign-name>Campaign</span></h3>
-      <p>Isi data singkat di bawah ini. Kami akan menghubungi Anda.</p>
+      <p>Isi data singkat di bawah ini. Kami akan menghubungi Anda via WhatsApp/Email.</p>
 
       <form id="interest_form" novalidate>
         <input type="hidden" id="interest_campaignId" />
-        <div class="form-row">
-          <label for="interest_firstName">Nama Depan *</label>
-          <input id="interest_firstName" class="input" placeholder="Contoh: Budi" required aria-required="true" />
+
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="interest_firstName">Nama Depan *</label>
+            <input id="interest_firstName" class="input" placeholder="Contoh: Budi" required
+                  autocomplete="given-name" maxlength="60" />
+            <small id="firstName_msg" class="field-msg error" hidden></small>
+          </div>
+
+          <div class="form-row">
+            <label for="interest_lastName">Nama Belakang *</label>
+            <input id="interest_lastName" class="input" placeholder="Contoh: Santoso" required
+                  autocomplete="family-name" maxlength="60" />
+            <small id="lastName_msg" class="field-msg error" hidden></small>
+          </div>
         </div>
-        <div class="form-row">
-          <label for="interest_lastName">Nama Belakang *</label>
-          <input id="interest_lastName" class="input" placeholder="Contoh: Santoso" required aria-required="true" />
-        </div>
+
         <div class="form-row">
           <label for="interest_email">Email *</label>
-          <input id="interest_email" class="input" type="email" placeholder="nama@domain.com" required aria-required="true" aria-describedby="email_help email_error" />
-          <small id="email_help" class="help">Gunakan email aktif (bukan sementara/disposable).</small>
-          <small id="email_error" class="help error" hidden></small>
+          <input id="interest_email" class="input" type="email" placeholder="nama@domain.com" required
+                autocomplete="email" aria-describedby="email_help email_error" />
+          <small id="email_help" class="field-msg">Gunakan email aktif (bukan sementara/disposable).</small>
+          <small id="email_error" class="field-msg error" hidden></small>
         </div>
+
         <div class="form-row">
           <label for="interest_company">Sekolah / Institusi</label>
-          <input id="interest_company" class="input" placeholder="Contoh: SMA 7 Jakarta / PT ABC" autocomplete="organization" />
+          <input id="interest_company" class="input" placeholder="Contoh: SMA 7 Jakarta / PT ABC" autocomplete="organization" maxlength="80" />
         </div>
+
         <div class="form-row">
           <label for="interest_phone">No. HP</label>
           <div class="phone-input">
             <span class="prefix">+62</span>
-            <input id="interest_phone" class="input phone-suffix" type="tel" inputmode="numeric" placeholder="81234567890" />
+            <input id="interest_phone" class="input phone-suffix" type="tel" inputmode="numeric"
+                  placeholder="81234567890" autocomplete="tel-national" maxlength="13" />
           </div>
+          <small id="phone_msg" class="field-msg error" hidden></small>
         </div>
+
         <button id="interest_submit" class="btn btn-primary" type="submit">Kirim</button>
         <p id="interest_msg" class="msg" aria-live="polite"></p>
       </form>

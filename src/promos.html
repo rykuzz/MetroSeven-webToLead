@@ -4,34 +4,48 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Promo & Bootcamp — Metro Seven University</title>
-  <meta name="description" content="Promo & bootcamp aktif. Daftar promo terhubung ke Campaign Salesforce." />
+  <meta name="description" content="Promo & bootcamp aktif. Kuota real-time. Daftar promo terhubung ke Campaign Salesforce." />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
-  <!-- SweetAlert2 -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <link rel="stylesheet" href="css/promos.css" />
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/responsive.css">
 </head>
 <body>
-  <header class="site-header">
-    <div class="container">
-      <a class="brand" href="index.html">Metro Seven University</a>
-      <nav class="nav">
-        <a href="index.html">Home</a>
-        <a href="register.html">Register</a>
-        <a class="active" href="promos.html" aria-current="page">Promo</a>
-      </nav>
-    </div>
-  </header>
+  <!-- Blurry background layer -->
+  <div class="page-bg" aria-hidden="true"></div>
+
+  <!-- Navbar inline (match index) -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University Logo" class="logo">
+                <span>Metro Seven</span>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item"><a href="#home" class="nav-link">Beranda</a></li>
+                <li class="nav-item"><a href="#programs" class="nav-link">Program</a></li>
+                <li class="nav-item"><a href="#testimonials" class="nav-link">Testimoni</a></li>
+                <li class="nav-item"><a href="#contact" class="nav-link">Kontak</a></li>
+            </ul>
+            <div class="nav-cta">
+                 <a href="register.html" target="_blank" class="btn btn-primary">Register</a>
+            </div>
+            <div class="hamburger">
+                <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+            </div>
+        </div>
+    </nav>
 
   <main class="container">
     <section class="hero">
-      <h1>Promo & Bootcamp</h1>
-      <p>Temukan promo aktif. Kuota real-time. Klik “Daftar Promo” untuk mendaftar (Lead + CampaignMember).</p>
+      <h1>Promo Metro Seven University</h1>
     </section>
 
-    <!-- ===== Promo Carousel (baru) ===== -->
+    <!-- Featured Carousel -->
     <section id="featured" class="featured" aria-label="Promo unggulan" hidden>
-      <div class="carousel">
+      <div class="carousel" role="region" aria-roledescription="carousel" aria-label="Promo unggulan">
         <button class="car-btn prev" id="featPrev" aria-label="Sebelumnya">‹</button>
         <div class="carousel-viewport">
           <div class="carousel-track" id="featTrack" role="listbox" aria-live="polite"></div>
@@ -41,19 +55,23 @@
       <div class="dots" id="featDots" aria-hidden="true"></div>
     </section>
 
+    <!-- Filters + Share -->
     <section class="filters">
       <input id="q" class="input" placeholder="Cari promo / deskripsi…" />
-      <select id="status" class="input">
+      <select id="status" class="input" aria-label="Status">
         <option value="active" selected>Aktif</option>
         <option value="upcoming">Akan Datang</option>
         <option value="past">Selesai</option>
         <option value="all">Semua</option>
       </select>
-      <select id="sort" class="input">
-        <option value="startDateDesc">Terbaru (Mulai)</option>
-        <option value="startDateAsc">Terdekat (Mulai)</option>
-        <option value="createdDesc">Terbaru (Dibuat)</option>
-      </select>
+      <div class="filters-actions">
+        <select id="sort" class="input" aria-label="Urutkan">
+          <option value="startDateDesc">Terbaru (Mulai)</option>
+          <option value="startDateAsc">Terdekat (Mulai)</option>
+          <option value="createdDesc">Terbaru (Dibuat)</option>
+        </select>
+        <button id="share" class="btn" type="button" aria-label="Bagikan filter">Bagikan</button>
+      </div>
     </section>
 
     <section id="grid" class="grid" aria-live="polite">
@@ -62,34 +80,40 @@
     </section>
 
     <nav id="pager" class="pager">
-      <button id="prev" class="btn" disabled>← Sebelumnya</button>
+      <button id="prev" class="btn" disabled aria-label="Halaman sebelumnya">← Sebelumnya</button>
       <span id="pageInfo"></span>
-      <button id="next" class="btn">Selanjutnya →</button>
+      <button id="next" class="btn" aria-label="Halaman selanjutnya">Selanjutnya →</button>
     </nav>
 
-    <p id="msg" class="msg" aria-live="polite"></p>
+    <p id="msg" class="msg" role="status" aria-live="polite"></p>
   </main>
 
   <!-- Modal Daftar Promo -->
-  <div id="interestModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="modal-dialog">
+  <div id="interestModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="interest_title">
+    <div class="modal-dialog" role="document">
       <button id="interest_close" class="modal-close" aria-label="Tutup">✕</button>
-      <h3>Daftar Promo: <span data-campaign-name>Campaign</span></h3>
+      <h3 id="interest_title">Daftar Promo: <span data-campaign-name>Campaign</span></h3>
       <p>Isi data singkat di bawah ini. Kami akan menghubungi Anda.</p>
 
       <form id="interest_form" novalidate>
         <input type="hidden" id="interest_campaignId" />
         <div class="form-row">
           <label for="interest_firstName">Nama Depan *</label>
-          <input id="interest_firstName" class="input" placeholder="Contoh: Budi" required />
+          <input id="interest_firstName" class="input" placeholder="Contoh: Budi" required aria-required="true" />
         </div>
         <div class="form-row">
           <label for="interest_lastName">Nama Belakang *</label>
-          <input id="interest_lastName" class="input" placeholder="Contoh: Santoso" required />
+          <input id="interest_lastName" class="input" placeholder="Contoh: Santoso" required aria-required="true" />
         </div>
         <div class="form-row">
           <label for="interest_email">Email *</label>
-          <input id="interest_email" class="input" type="email" placeholder="nama@domain.com" required />
+          <input id="interest_email" class="input" type="email" placeholder="nama@domain.com" required aria-required="true" aria-describedby="email_help email_error" />
+          <small id="email_help" class="help">Gunakan email aktif (bukan sementara/disposable).</small>
+          <small id="email_error" class="help error" hidden></small>
+        </div>
+        <div class="form-row">
+          <label for="interest_company">Sekolah / Institusi</label>
+          <input id="interest_company" class="input" placeholder="Contoh: SMA 7 Jakarta / PT ABC" autocomplete="organization" />
         </div>
         <div class="form-row">
           <label for="interest_phone">No. HP</label>

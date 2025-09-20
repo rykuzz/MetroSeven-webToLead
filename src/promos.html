@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Promo & Bootcamp — Metro Seven University</title>
+  <meta name="description" content="Promo & bootcamp aktif. Daftar promo atau daftar umum terhubung ke Campaign Salesforce." />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/promos.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="index.html">Metro Seven University</a>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="register.html">Register</a>
+        <a class="active" href="promos.html" aria-current="page">Promo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h1>Promo & Bootcamp</h1>
+      <p>Temukan promo aktif. Kuota real-time. Klik “Daftar Promo” untuk mendaftar (Lead + CampaignMember), atau “Daftar Umum” untuk jalur Opportunity.</p>
+    </section>
+
+    <section class="filters">
+      <input id="q" class="input" placeholder="Cari promo / deskripsi…" />
+      <select id="status" class="input">
+        <option value="active" selected>Aktif</option>
+        <option value="upcoming">Akan Datang</option>
+        <option value="past">Selesai</option>
+        <option value="all">Semua</option>
+      </select>
+      <select id="sort" class="input">
+        <option value="startDateDesc">Terbaru (Mulai)</option>
+        <option value="startDateAsc">Terdekat (Mulai)</option>
+        <option value="createdDesc">Terbaru (Dibuat)</option>
+      </select>
+    </section>
+
+    <section id="grid" class="grid" aria-live="polite"></section>
+
+    <nav id="pager" class="pager">
+      <button id="prev" class="btn" disabled>← Sebelumnya</button>
+      <span id="pageInfo"></span>
+      <button id="next" class="btn">Selanjutnya →</button>
+    </nav>
+
+    <p id="msg" class="msg" aria-live="polite"></p>
+  </main>
+
+  <!-- Modal Daftar Promo (Lead + CampaignMember) -->
+  <div id="interestModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <button id="interest_close" class="modal-close" aria-label="Tutup">✕</button>
+      <h3>Daftar Promo: <span data-campaign-name>Campaign</span></h3>
+      <p>Isi data singkat di bawah ini. Kami akan menghubungi Anda.</p>
+
+      <form id="interest_form">
+        <input type="hidden" id="interest_campaignId" />
+
+        <div class="form-row">
+          <label for="interest_firstName">Nama Depan *</label>
+          <input id="interest_firstName" class="input" placeholder="Contoh: Budi" required />
+        </div>
+        <div class="form-row">
+          <label for="interest_lastName">Nama Belakang *</label>
+          <input id="interest_lastName" class="input" placeholder="Contoh: Santoso" required />
+        </div>
+        <div class="form-row">
+          <label for="interest_email">Email *</label>
+          <input id="interest_email" class="input" type="email" placeholder="nama@domain.com" required />
+        </div>
+        <div class="form-row">
+          <label for="interest_phone">No. HP</label>
+          <div class="phone-input">
+            <span class="prefix">+62</span>
+            <input id="interest_phone" class="input phone-suffix" type="tel" placeholder="81234567890" />
+          </div>
+        </div>
+
+        <button class="btn btn-primary" type="submit">Kirim</button>
+        <p id="interest_msg" class="msg" aria-live="polite"></p>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/promos.js"></script>
+</body>
+</html>

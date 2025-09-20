@@ -1,133 +1,478 @@
-:root{
-  --card:#fff; --muted:#6b7280; --ink:#0f172a;
-  --primary:#2563eb; --primary-600:#1d4ed8; --ring:rgba(37,99,235,.25);
-  --chip:#f3f4f6; --sale:#f43f5e; --bg:#f8fafc; --border:#e5e7eb;
-  --shadow:rgba(15,23,42,.06); --shadow-2:rgba(15,23,42,.10);
-}
-@media (prefers-color-scheme: dark) {
-  :root{
-    --card:#0b1020; --bg:#070a14; --ink:#e5e7eb;
-    --muted:#9aa3b2; --border:#1f2a44; --chip:#111a2d;
-    --shadow:rgba(0,0,0,.35); --shadow-2:rgba(0,0,0,.5);
+(() => {
+  const $  = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+  // elements
+  const grid     = $("#grid");
+  const qEl      = $("#q");
+  const statusEl = $("#status");
+  const sortEl   = $("#sort");
+  const shareBtn = $("#share");
+  const msgEl    = $("#msg");
+  const prevBtn  = $("#prev");
+  const nextBtn  = $("#next");
+  const pageInfo = $("#pageInfo");
+  const submitBtn= $("#interest_submit");
+
+  // featured
+  const featWrap = $("#featured");
+  const featTrack= $("#featTrack");
+  const featDots = $("#featDots");
+  const featPrev = $("#featPrev");
+  const featNext = $("#featNext");
+
+  // state (hydrate from URL)
+  let state = { q:"", status:"active", sort:"startDateDesc", page:1, limit:12, total:0 };
+  try {
+    const usp = new URLSearchParams(location.search);
+    if (usp.has('q')) state.q = qEl.value = usp.get('q') || "";
+    if (usp.has('status')) state.status = statusEl.value = usp.get('status') || "active";
+    if (usp.has('sort')) state.sort = sortEl.value = usp.get('sort') || "startDateDesc";
+    if (usp.has('page')) state.page = Math.max(1, parseInt(usp.get('page')||'1',10));
+  } catch {}
+
+  const rupiah  = v => v==null ? null : new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(v);
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : null;
+
+  // ===== helpers =====
+  function setUrlFromState(){
+    const usp = new URLSearchParams({
+      ...(state.q ? {q:state.q} : {}),
+      status: state.status,
+      sort: state.sort,
+      page: String(state.page)
+    });
+    history.replaceState(null, "", `${location.pathname}?${usp.toString()}`);
   }
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0;font-family:Poppins,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial;color:var(--ink);background:var(--bg)}
-.container{max-width:1080px;margin:0 auto;padding:24px}
+  function copyCurrentUrl(){
+    navigator.clipboard.writeText(location.href)
+      .then(() => Swal.fire({icon:'success', title:'Tautan disalin', text:'Filter saat ini siap dibagikan.'}))
+      .catch(() => Swal.fire({icon:'error', title:'Gagal menyalin'}));
+  }
 
-/* Blurry page background */
-.page-bg{position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:linear-gradient(180deg, rgba(248,250,252,.88), rgba(248,250,252,.70)),
-             url('assets/images/bg-campus.jpg') center/cover no-repeat fixed;
-  filter: blur(14px) saturate(115%) contrast(102%); transform: scale(1.04);
-}
-.site-header, main.container, .modal{position:relative; z-index:1}
+  // email validation (strict)
+  function validateEmailStrict(email) {
+    const e = String(email || '').trim();
+    const basic = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+    if (!basic.test(e)) return 'Format email tidak valid.';
+    if (e.includes('..')) return 'Email tidak boleh mengandung dua titik berurutan.';
+    const [_, domain] = e.split('@');
+    if (!domain || domain.startsWith('.') || domain.endsWith('.') || domain.startsWith('-') || domain.endsWith('-')) return 'Domain email tidak valid.';
+    if (!domain.includes('.')) return 'Domain email tidak valid.';
+    const tld = domain.split('.').pop();
+    if (!tld || tld.length < 2) return 'TLD domain terlalu pendek.';
+    const disposable = new Set(['mailinator.com','yopmail.com','10minutemail.com','guerrillamail.com','temp-mail.org','tempmail.com','trashmail.com','sharklasers.com']);
+    if (disposable.has(domain.toLowerCase())) return 'Gunakan email aktif (bukan email sementara/disposable).';
+    return null;
+  }
 
-/* Header (glass-ready) */
-.site-header{background:linear-gradient(180deg,#fff,#f7f9ff);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
-@supports (backdrop-filter: blur(6px)) {
-  .site-header{background:rgba(255,255,255,.6);backdrop-filter:saturate(140%) blur(8px)}
-}
-.site-header .container{display:flex;align-items:center;gap:24px}
-.brand{font-weight:700;text-decoration:none;color:var(--ink)}
-.nav{margin-left:auto;display:flex;gap:12px}
-.nav a{color:#374151;text-decoration:none;padding:10px 12px;border-radius:10px}
-.nav a.active,.nav a:hover{background:#eef2ff;color:#1e3a8a}
+  // ===== Featured Carousel =====
+  let slides = [];
+  let current = 0;
+  let autoTimer = null;
+  const AUTO_INTERVAL = 5000;
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-.hero{padding:24px 0 8px}
-.hero h1{margin:0 0 6px}
-.hero p{margin:0;color:var(--muted)}
+  function buildSlide(rec){
+    const img = rec.imageUrl || 'assets/images/promo-placeholder.jpg';
+    const dateStr = [fmtDate(rec.startDate), fmtDate(rec.endDate)].filter(Boolean).join(' — ');
+    const priceStr = rec.price!=null ? rupiah(rec.price) : '';
+    const discountStr = rec.discountPercent!=null ? `${rec.discountPercent}% OFF` : '';
 
-/* Filters */
-.filters{display:grid;grid-template-columns:1fr 180px 1fr;gap:12px;margin:16px 0 24px}
-.filters-actions{display:flex;gap:10px}
-.input{padding:12px 14px;border:1px solid var(--border);border-radius:12px;outline:none;background:#fff}
-.input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--ring)}
-@media (prefers-color-scheme: dark){
-  .input{background:#0e172a;color:var(--ink)}
-}
+    return `
+    <div class="slide" data-campaign="${rec.id}" role="option" aria-label="${rec.name}" tabindex="0">
+      <img src="${img}" alt="${rec.name}"
+           loading="lazy" decoding="async" width="1280" height="720"
+           srcset="${img} 1280w" sizes="100vw">
+      <div class="badges-left">
+        ${discountStr ? `<span class="badge badge-sale">${discountStr}</span>` : ''}
+        ${rec.category ? `<span class="badge badge-cat">${rec.category}</span>` : ''}
+      </div>
+      <div class="badges-right">
+        <span class="badge badge-quota" data-quota-for="${rec.id}" hidden aria-live="polite">Kuota: …</span>
+      </div>
+      <div class="content">
+        <h3 class="title">${rec.name}</h3>
+        <div class="meta">${[dateStr, rec.category].filter(Boolean).join(' • ')}</div>
+        <div class="meta">${[priceStr].filter(Boolean).join(' · ')}</div>
+        <div class="actions">
+          <button class="btn btn-primary" type="button" data-register data-campaign="${rec.id}" data-name="${rec.name}">
+            Daftar Promo
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }
 
-/* Grid & Card */
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-@media (max-width:980px){.grid{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:640px){.grid{grid-template-columns:1fr}.filters{grid-template-columns:1fr;gap:10px}}
+  async function loadFeatured(){
+    try{
+      const r = await fetch(`/api/campaigns?status=active&sort=startDateDesc&page=1&limit=12`, { cache:'no-store' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || 'Gagal ambil featured');
 
-.card{background:var(--card);border:1px solid #eef2f7;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 30px var(--shadow);transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease}
-.card:hover{transform:translateY(-3px);box-shadow:0 18px 45px var(--shadow-2);border-color:#dfe6fb}
-.thumb{position:relative;aspect-ratio:16/9;background:#eef2f7;overflow:hidden}
-.thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.badge{background:var(--chip);color:#111827;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:600}
-.badge-sale{background:var(--sale);color:#fff}
-.badge-cat{background:var(--chip)}
-.badge-quota{background:#111827;color:#fff;opacity:.95}
+      const recs = (j.records || [])
+        .filter(x => x.imageUrl || x.priority != null)
+        .slice(0, 8);
 
-/* Badge wrappers (diskon kiri, kuota kanan) */
-.badges-left,.badges-right{position:absolute;top:10px;display:flex;flex-direction:column;gap:8px;z-index:2}
-.badges-left{left:10px;align-items:flex-start}
-.badges-right{right:10px;align-items:flex-end}
-.badges-left .badge,.badges-right .badge{position:relative}
+      if (!recs.length) { featWrap.hidden = true; return; }
 
-/* Body */
-.card-body{padding:14px 16px 16px}
-.title{margin:0 0 6px 0;font-size:18px;line-height:1.4}
-.meta{font-size:12px;color:var(--muted);margin-bottom:8px}
-.desc{color:#475569;font-size:14px;min-height:42px}
+      slides = recs;
+      featTrack.innerHTML = recs.map(buildSlide).join('');
+      featDots.innerHTML  = recs.map((_,i)=>`<button class="dot ${i===0?'active':''}" data-i="${i}" aria-label="Slide ${i+1}"></button>`).join('');
+      featWrap.hidden = false;
 
-/* CTA & Price */
-.cta{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.pricing{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.price s{opacity:.6;margin-right:6px}
-.price-final{font-weight:700}
-.status{font-size:12px;color:#64748b;background:#f1f5f9;border-radius:999px;padding:6px 10px}
+      // observe quota for visible slides
+      recs.forEach(it => observeQuotaForId(it.id));
 
-/* Buttons */
-.btn{appearance:none;border:none;background:#e5e7eb;color:#111827;border-radius:12px;padding:10px 14px;cursor:pointer;text-decoration:none;transition:filter .18s}
-.btn:hover{filter:brightness(0.97)}
-.btn:focus-visible{outline:3px solid #93c5fd;outline-offset:2px}
-.btn:disabled,.is-disabled{opacity:.55;cursor:not-allowed}
-.btn-primary{background:var(--primary);color:#fff}
-.btn-primary:hover{background:var(--primary-600)}
+      // nav
+      featPrev.onclick = ()=> go(current-1);
+      featNext.onclick = ()=> go(current+1);
+      featDots.onclick = (e)=>{ const t = e.target.closest('.dot'); if(!t) return; go(Number(t.dataset.i)); };
 
-/* Pager & Empty */
-.pager{display:flex;align-items:center;justify-content:center;gap:16px;margin:24px 0}
-#pageInfo{color:#6b7280}
-.msg{margin:8px 0 24px;color:#ef4444}
-.empty{padding:24px;text-align:center;color:#64748b;border:1px dashed var(--border);border-radius:12px;background:#fff}
-.empty .tips{margin-top:10px;color:#6b7280;font-size:14px}
+      // keyboard navigation
+      featTrack.addEventListener('keydown', (e)=>{
+        if (e.key === 'ArrowLeft') go(current-1);
+        if (e.key === 'ArrowRight') go(current+1);
+      });
 
-/* Featured carousel */
-.featured{margin:10px 0 18px}
-.carousel{position:relative}
-.carousel-viewport{overflow:hidden;border-radius:16px}
-.carousel-track{display:flex;gap:12px;transition:transform .35s ease;will-change:transform}
-.slide{position:relative;min-width:100%;height:280px;border-radius:16px;overflow:hidden;background:#111}
-.slide img{width:100%;height:100%;object-fit:cover;display:block;filter:contrast(1.05)}
-.slide::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(2,6,23,.7),rgba(2,6,23,.35) 45%,rgba(2,6,23,.1))}
-.slide .content{position:absolute;left:20px;bottom:18px;right:20px;z-index:2;color:#fff;display:grid;gap:8px}
-.slide .title{margin:0;font-size:22px;font-weight:700}
-.slide .meta{opacity:.9;font-size:13px}
-.slide .actions{display:flex;gap:10px;align-items:center;margin-top:6px}
-.car-btn{position:absolute;top:50%;transform:translateY(-50%);z-index:3;border:none;background:rgba(15,23,42,.6);color:#fff;width:38px;height:38px;border-radius:999px;cursor:pointer}
-.car-btn:hover{background:rgba(15,23,42,.8)}
-.car-btn.prev{left:10px}.car-btn.next{right:10px}
-.dots{display:flex;gap:6px;justify-content:center;margin-top:10px}
-.dot{width:8px;height:8px;border-radius:999px;background:#d1d5db;opacity:.8}
-.dot.active{background:#4f46e5;opacity:1}
+      // autoplay
+      if (!reduceMotion) startAuto();
 
-/* Modal */
-.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:100}
-.modal.show{display:flex}
-.modal-dialog{background:#fff;border-radius:18px;max-width:520px;width:100%;padding:20px 20px 16px;position:relative;box-shadow:0 22px 60px rgba(0,0,0,.25)}
-@supports (backdrop-filter: blur(6px)) {.modal-dialog{background:rgba(255,255,255,.72);backdrop-filter:saturate(140%) blur(10px);border: 1px solid rgba(255,255,255,.6)}}
-.modal-close{position:absolute;top:10px;right:10px;border:none;background:transparent;font-size:18px;cursor:pointer}
-.form-row{display:flex;flex-direction:column;margin:10px 0}
-.form-row label{font-size:13px;margin-bottom:6px;color:#111827}
-.phone-input{display:flex;align-items:center}
-.phone-input .prefix{background:#f3f4f6;border:1px solid var(--border);border-right:none;border-radius:8px 0 0 8px;padding:12px 10px}
-.phone-input .phone-suffix{border-radius:0 8px 8px 0}
-.help{font-size:12px;color:#6b7280}
-.help.error{color:#ef4444}
+      // pause on hover/focus
+      featTrack.addEventListener('mouseenter', stopAuto);
+      featTrack.addEventListener('mouseleave', startAuto);
+      featTrack.addEventListener('focusin', stopAuto);
+      featTrack.addEventListener('focusout', startAuto);
 
-/* Skeleton */
-.skeleton{height:320px;border-radius:16px;background:linear-gradient(90deg,#eef2f7 25%,#f3f5fb 37%,#eef2f7 63%);background-size:400% 100%;animation:shimmer 1.1s infinite linear}
-@keyframes shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+      // drag/swipe
+      enableDrag(featTrack);
+    }catch(e){ console.warn('featured error', e.message); featWrap.hidden = true; }
+  }
+  function go(n){
+    if (!slides.length) return;
+    current = (n + slides.length) % slides.length;
+    featTrack.style.transform = `translateX(-${current*100}%)`;
+    $$('.dot', featDots).forEach((d,i)=> d.classList.toggle('active', i===current));
+    restartAuto();
+  }
+  function startAuto(){ stopAuto(); autoTimer = setInterval(()=> go(current+1), AUTO_INTERVAL); }
+  function stopAuto(){ if (autoTimer) clearInterval(autoTimer); autoTimer = null; }
+  function restartAuto(){ if (!reduceMotion) startAuto(); }
+  function enableDrag(track){
+    let startX=0, delta=0, dragging=false;
+    const onDown=(x)=>{ dragging=true; startX=x; delta=0; track.style.transition='none'; };
+    const onMove=(x)=>{ if(!dragging) return; delta = x-startX; track.style.transform = `translateX(${ -current*100 + (delta/track.clientWidth)*100 }%)`; };
+    const onUp=()=>{ if(!dragging) return; track.style.transition='transform .35s ease';
+      if (Math.abs(delta) > track.clientWidth*0.2) go(delta<0?current+1:current-1); else go(current);
+      dragging=false; delta=0;
+    };
+    track.addEventListener('mousedown', e=>onDown(e.clientX));
+    window.addEventListener('mousemove', e=>onMove(e.clientX));
+    window.addEventListener('mouseup', onUp);
+    track.addEventListener('touchstart', e=>onDown(e.touches[0].clientX), {passive:true});
+    window.addEventListener('touchmove', e=>onMove(e.touches[0].clientX), {passive:true});
+    window.addEventListener('touchend', onUp);
+  }
+
+  // ===== Grid list =====
+  function priceBlock(price, discountPercent){
+    if (price == null) return '';
+    if (discountPercent == null) return `<span class="price price-final">${rupiah(price)}</span>`;
+    const final = Math.max(0, Math.round(price * (100 - discountPercent) / 100));
+    const hemat = price - final;
+    return `
+      <span class="price"><s>${rupiah(price)}</s> <span class="price-final">${rupiah(final)}</span></span>
+      <span class="status">Hemat ${rupiah(hemat)}</span>
+    `;
+  }
+
+  function card(record){
+    const { id, name, description, imageUrl, startDate, endDate, status, category, price, discountPercent } = record;
+    const dateStr   = [fmtDate(startDate), fmtDate(endDate)].filter(Boolean).join(' — ');
+    const plainDesc = (description || '').replace(/<[^>]+>/g,'');
+    const desc      = plainDesc.length > 160 ? (plainDesc.slice(0,160) + '…') : plainDesc;
+    const img       = imageUrl || 'assets/images/promo-placeholder.jpg';
+
+    const showStatus = status && status.toLowerCase() !== 'planned';
+    const statusHtml = showStatus ? `<span class="status ${'st-'+status.toLowerCase().replace(/\s+/g,'-')}">${status}</span>` : '';
+
+    return `
+    <article class="card" data-campaign="${id}">
+      <div class="thumb">
+        <img src="${img}" alt="${name}" loading="lazy" decoding="async" width="640" height="360"
+             srcset="${img} 640w, ${img} 960w, ${img} 1280w"
+             sizes="(max-width:640px) 100vw, (max-width:980px) 50vw, 33vw">
+        <div class="badges-left">
+          ${discountPercent!=null ? `<span class="badge badge-sale">${discountPercent}% OFF</span>` : ''}
+          ${category ? `<span class="badge badge-cat">${category}</span>` : ''}
+        </div>
+        <div class="badges-right">
+          <span class="badge badge-quota" data-quota-for="${id}" hidden aria-live="polite">Kuota: …</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <h3 class="title">${name}</h3>
+        ${dateStr ? `<div class="meta">${dateStr}</div>` : ''}
+        <p class="desc">${desc || ''}</p>
+        <div class="cta">
+          <div class="pricing">
+            ${priceBlock(price, discountPercent)}
+            ${statusHtml}
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" type="button" data-register data-campaign="${id}" data-name="${name}">
+              Daftar Promo
+            </button>
+          </div>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  // Abortable list fetch
+  let listAbort;
+  async function load(){
+    setUrlFromState();
+    msgEl.textContent = "Memuat promo…";
+    grid.innerHTML = `<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+                      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>`;
+    prevBtn.disabled = true; nextBtn.disabled = true;
+
+    const params = new URLSearchParams({
+      q: state.q, status: state.status, sort: state.sort,
+      page: String(state.page), limit: String(state.limit)
+    });
+
+    try {
+      listAbort?.abort(); listAbort = new AbortController();
+      const r = await fetch(`/api/campaigns?${params}`, { signal:listAbort.signal, cache:'no-store' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || "Gagal mengambil data");
+
+      state.total = j.total || 0;
+      const items = j.records || [];
+      grid.innerHTML = items.length
+        ? items.map(card).join("")
+        : `<div class="empty">Belum ada promo untuk filter ini.
+             <div class="tips">Coba ubah kata kunci, ganti status, atau
+               <button id="resetFilters" class="btn" type="button">Reset filter</button>
+             </div>
+           </div>`;
+
+      if (!items.length) {
+        const btnReset = $("#resetFilters");
+        if (btnReset) btnReset.onclick = () => {
+          qEl.value=''; statusEl.value='active'; sortEl.value='startDateDesc';
+          state = { q:"", status:"active", sort:"startDateDesc", page:1, limit:12, total:0 };
+          load();
+        };
+      }
+
+      const maxPage = Math.max(1, Math.ceil(state.total / state.limit));
+      pageInfo.textContent = `Halaman ${state.page} dari ${maxPage}`;
+      prevBtn.disabled = state.page <= 1;
+      nextBtn.disabled = state.page >= maxPage || !j.hasMore;
+
+      msgEl.textContent = "";
+
+      // observe quota only for visible elements
+      items.forEach(it => observeQuotaForId(it.id));
+
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      console.error(e);
+      msgEl.textContent = e.message || "Terjadi kesalahan memuat promo.";
+      grid.innerHTML = `<div class="empty">Gagal memuat data.</div>`;
+    }
+  }
+
+  // IntersectionObserver for quota
+  const visibleIds = new Set();
+  const io = new IntersectionObserver(entries=>{
+    entries.forEach(e=>{
+      const el = e.target;
+      if (e.isIntersecting) {
+        visibleIds.add(el.dataset.campaign);
+        updateQuota(el.dataset.campaign);
+      } else {
+        visibleIds.delete(el.dataset.campaign);
+      }
+    });
+  }, { root:null, rootMargin:'0px', threshold:0.1 });
+
+  function observeQuotaForId(id){
+    const el = document.querySelector(`.card[data-campaign="${id}"]`) ||
+               document.querySelector(`.slide[data-campaign="${id}"]`);
+    if (el) io.observe(el);
+  }
+
+  // periodic refresh only for visible
+  setInterval(()=>{ visibleIds.forEach(id => updateQuota(id)); }, 30000);
+
+  async function updateQuota(campaignId){
+    const badge = document.querySelector(`[data-quota-for="${campaignId}"]`);
+    const holder= document.querySelector(`.card[data-campaign="${campaignId}"]`) || document.querySelector(`.slide[data-campaign="${campaignId}"]`);
+    const btn   = holder?.querySelector('[data-register]');
+    if (!badge) return;
+
+    try {
+      const r = await fetch(`/api/campaign-stats?campaignId=${encodeURIComponent(campaignId)}`, { cache:'no-store' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || "Gagal ambil kuota");
+
+      if (j.quota == null) { badge.hidden = true; return; }
+
+      const txt = (j.remaining ?? null) != null
+        ? (j.remaining > 0 ? `Kuota tersisa: ${j.remaining}` : `Kuota penuh`)
+        : `Kuota: ${j.quota}`;
+
+      badge.textContent = txt;
+      badge.hidden = false;
+
+      if (j.remaining !== null && j.remaining <= 0) {
+        btn?.setAttribute('disabled','disabled'); btn?.classList.add('is-disabled'); btn.textContent = 'Kuota Penuh';
+      } else {
+        btn?.removeAttribute('disabled'); btn?.classList.remove('is-disabled'); btn.textContent = 'Daftar Promo';
+      }
+    } catch (e) { console.warn('quota error', e.message); }
+  }
+
+  // filters & paging
+  let t;
+  qEl.addEventListener('input', ()=>{
+    clearTimeout(t);
+    t = setTimeout(()=>{ state.q = qEl.value.trim(); state.page = 1; load(); }, 300);
+  });
+  statusEl.addEventListener('change', ()=>{ state.status = statusEl.value; state.page=1; load(); });
+  sortEl.addEventListener('change',   ()=>{ state.sort   = sortEl.value;   state.page=1; load(); });
+  prevBtn.addEventListener('click',   ()=>{ if (state.page>1){ state.page--; load(); }});
+  nextBtn.addEventListener('click',   ()=>{ state.page++; load(); });
+  shareBtn.addEventListener('click',  copyCurrentUrl);
+
+  // modal daftar promo
+  let lastFocus = null;
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-register]');
+    if (!btn) return;
+    lastFocus = btn;
+    openRegisterModal({ campaignId: btn.dataset.campaign, campaignName: btn.dataset.name });
+  });
+
+  function openRegisterModal({ campaignId, campaignName }){
+    const m = $('#interestModal');
+    m.querySelector('[data-campaign-name]').textContent = campaignName || 'Campaign';
+    m.querySelector('#interest_campaignId').value = campaignId;
+    m.classList.add('show');
+    trapFocus(m);
+    $('#interest_firstName').focus();
+    stopAuto(); // pause carousel autoplay
+  }
+
+  $('#interest_close').addEventListener('click', closeModal);
+  function closeModal(){
+    const m = $('#interestModal');
+    m.classList.remove('show');
+    releaseFocus();
+    if (lastFocus) lastFocus.focus();
+    restartAuto();
+  }
+
+  // ESC close
+  document.addEventListener('keydown', (e)=>{
+    if (e.key === 'Escape' && $('#interestModal').classList.contains('show')) closeModal();
+  });
+
+  // digits-only phone
+  $('#interest_phone').addEventListener('input', (e)=>{
+    e.target.value = e.target.value.replace(/\D/g,'');
+  });
+
+  // a11y: toggle aria-invalid
+  function setInvalid(input, msg){
+    const err = $('#email_error');
+    if (msg) {
+      input.setAttribute('aria-invalid','true');
+      err.hidden = false; err.textContent = msg;
+    } else {
+      input.removeAttribute('aria-invalid');
+      err.hidden = true; err.textContent = '';
+    }
+  }
+
+  $('#interest_form').addEventListener('submit', async (ev)=>{
+    ev.preventDefault();
+    const firstName = $('#interest_firstName').value.trim();
+    const lastName  = $('#interest_lastName').value.trim();
+    const email     = $('#interest_email').value.trim();
+    const company   = $('#interest_company').value.trim();
+    const phoneRaw  = $('#interest_phone').value.trim();
+    const campaignId= $('#interest_campaignId').value;
+
+    if (!firstName || !lastName || !email){
+      Swal.fire({icon:'warning', title:'Lengkapi data', text:'Nama & email wajib diisi.'}); return;
+    }
+    const emailErr = validateEmailStrict(email);
+    setInvalid($('#interest_email'), emailErr);
+    if (emailErr){ Swal.fire({icon:'warning', title:'Email tidak valid', text: emailErr}); return; }
+
+    let s = phoneRaw.replace(/\D/g,'');
+    if (s.startsWith('0')) s = s.slice(1);
+    const phone = s ? `+62${s}` : null;
+
+    const payload = {
+      firstName, lastName, email, phone, company, campaignId,
+      leadSource:'Promo Page', leadStatus:'Open - Not Contacted', campaignMemberStatus:'Responded'
+    };
+
+    try {
+      submitBtn.disabled = true; submitBtn.textContent = 'Mengirim…';
+      const r = await fetch('/api/lead-interest', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+      });
+      const ct = r.headers.get('content-type') || '';
+      const data = ct.includes('application/json') ? await r.json() : { message: await r.text() };
+      if (!r.ok) throw new Error(data.message || 'Gagal menyimpan pendaftaran');
+
+      if (data.alreadyRegistered) {
+        await Swal.fire({icon:'info', title:'Anda sudah terdaftar', text:'Data Anda sudah tercatat pada promo ini.'});
+      } else {
+        await Swal.fire({icon:'success', title:'Pendaftaran berhasil', text:'Terima kasih! Pendaftaran promo Anda diterima.'});
+      }
+
+      updateQuota(campaignId);
+      closeModal();
+      $('#interest_form').reset();
+
+    } catch (e) {
+      console.error(e);
+      Swal.fire({icon:'error', title:'Gagal', text: e.message || 'Terjadi kesalahan. Coba lagi.'});
+    } finally {
+      submitBtn.disabled = false; submitBtn.textContent = 'Kirim';
+    }
+  });
+
+  // focus trap modal
+  let focusTrapRemovers = [];
+  function trapFocus(container){
+    const focusable = 'a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    function handler(e){
+      if (!container.classList.contains('show')) return;
+      const nodes = Array.from(container.querySelectorAll(focusable)).filter(el=>!el.disabled && el.offsetParent!==null);
+      if (!nodes.length) return;
+      const first = nodes[0], last = nodes[nodes.length-1];
+      if (e.key === 'Tab'){
+        if (e.shiftKey && document.activeElement === first){ last.focus(); e.preventDefault(); }
+        else if (!e.shiftKey && document.activeElement === last){ first.focus(); e.preventDefault(); }
+      }
+    }
+    document.addEventListener('keydown', handler);
+    focusTrapRemovers.push(()=>document.removeEventListener('keydown', handler));
+  }
+  function releaseFocus(){ focusTrapRemovers.forEach(fn=>fn()); focusTrapRemovers=[]; }
+
+  // init
+  (async function init(){
+    await loadFeatured();
+    await load();
+  })();
+})();

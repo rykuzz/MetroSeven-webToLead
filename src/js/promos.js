@@ -22,7 +22,7 @@
   const featNext  = $("#featNext");
 
   // ===== Konstanta gambar =====
-  const IMG_PLACEHOLDER = 'assets/images/promo-placeholder.jpg';
+  const IMG_PLACEHOLDER = 'https://placehold.co/640x360?text=Promo';
   const IMG_FALLBACK    = 'https://placehold.co/640x360?text=Promo';
 
   // ===== Cache URL public link per Campaign =====
@@ -98,60 +98,66 @@
     return null;
   }
 
-  // ======= Image resolver (DINAMIS dari SF – JSON public link) =======
+  // ======= Image resolver (Field URL -> fallback API) =======
   async function fetchPromoImageUrl(campaignId){
     if (imageUrlCache.has(campaignId)) return imageUrlCache.get(campaignId);
     try {
-      const r = await fetch(`/api/promo-image?campaignId=${encodeURIComponent(campaignId)}&format=url`, {
-        headers: { 'Accept': 'application/json' },
-        cache: 'no-store'
-      });
+      const url = new URL('/api/promo-image', location.origin);
+      url.searchParams.set('campaignId', campaignId);
+      url.searchParams.set('format', 'url');
+
+      const r = await fetch(url.toString(), { headers:{'Accept':'application/json'}, cache:'no-store' });
       const j = await r.json();
       if (!r.ok || !j.success || !j.url) throw new Error(j.message || 'No image URL');
       imageUrlCache.set(campaignId, j.url);
       return j.url;
     } catch (e) {
-      // cache negatif agar tidak spam request
-      imageUrlCache.set(campaignId, null);
+      imageUrlCache.set(campaignId, null); // cache negatif
       return null;
     }
   }
   function applyImgFallback(img){
     img.onerror = null;
-    img.src = IMG_PLACEHOLDER;
-    // jika placeholder lokal tidak ada, jatuhkan ke CDN placeholder
-    img.addEventListener('error', () => { img.src = IMG_FALLBACK; }, { once:true });
+    img.src = IMG_FALLBACK;
   }
-  async function resolveHolderImage(holder){
+  async function resolveImageWithFallback(holder){
     const id  = holder.dataset.campaign;
     const img = holder.querySelector('img');
     if (!id || !img) return;
-    // kalau sudah pernah resolve, skip
     if (img.dataset.resolved === '1') return;
 
-    const url = await fetchPromoImageUrl(id);
-    if (url) {
-      img.src = url;
-      img.removeAttribute('srcset'); // hindari browser tetap pakai srcset lama
+    const fieldUrl = img.dataset.sfPublic || null; // dari field Campaign (Promo_Image_URL__c)
+
+    if (fieldUrl) {
+      let triedFallback = false;
+      img.onerror = async () => {
+        if (triedFallback) { applyImgFallback(img); return; }
+        triedFallback = true;
+        const url2 = await fetchPromoImageUrl(id);
+        img.onerror = () => applyImgFallback(img);
+        img.src = url2 || IMG_FALLBACK;
+      };
+      img.src = fieldUrl;
       img.dataset.resolved = '1';
-    } else {
-      applyImgFallback(img);
-      img.dataset.resolved = '1';
+      return;
     }
+
+    const url = await fetchPromoImageUrl(id);
+    img.onerror = () => applyImgFallback(img);
+    img.src = url || IMG_FALLBACK;
+    img.dataset.resolved = '1';
   }
   const ioImg = new IntersectionObserver(entries => {
     entries.forEach(en => {
       if (en.isIntersecting) {
-        resolveHolderImage(en.target);
+        resolveImageWithFallback(en.target);
         ioImg.unobserve(en.target);
       }
     });
   }, { root: null, rootMargin: '200px', threshold: 0.01 });
 
   function wireImageResolver(scope=document){
-    // observe semua kartu/slide yang punya data-campaign
     scope.querySelectorAll('.card[data-campaign], .slide[data-campaign]').forEach(el => {
-      // set sementara placeholder jika belum ada
       const img = el.querySelector('img');
       if (img && !img.getAttribute('src')) img.src = IMG_PLACEHOLDER;
       ioImg.observe(el);
@@ -165,16 +171,15 @@
   const AUTO_INTERVAL = 5000;
 
   function buildSlide(rec){
-    // awalnya pakai placeholder; nanti di-resolve via wireImageResolver()
-    const img = IMG_PLACEHOLDER;
+    const sfUrl = rec.promoImageUrl || rec.imageUrl || '';
     const dateStr = [fmtDate(rec.startDate), fmtDate(rec.endDate)].filter(Boolean).join(' — ');
     const priceStr = rec.price!=null ? rupiah(rec.price) : '';
     const discountStr = rec.discountPercent!=null ? `${rec.discountPercent}% OFF` : '';
 
     return `
     <div class="slide" data-campaign="${rec.id}" role="option" aria-label="${rec.name}" tabindex="0">
-      <img src="${img}" alt="${rec.name}" loading="lazy" decoding="async" width="1280" height="720"
-           onerror="this.onerror=null;this.src='${IMG_FALLBACK}'">
+      <img src="${IMG_PLACEHOLDER}" alt="${rec.name}" loading="lazy" decoding="async" width="1280" height="720"
+           data-sf-public="${sfUrl}">
       <div class="badges-left">
         ${discountStr ? `<span class="badge badge-sale">${discountStr}</span>` : ''}
         ${rec.category ? `<span class="badge badge-cat">${rec.category}</span>` : ''}
@@ -201,10 +206,7 @@
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || 'Gagal ambil featured');
 
-      const recs = (j.records || [])
-        .filter(x => true) // tampilkan semua; gambar tetap di-resolve dinamis
-        .slice(0, 8);
-
+      const recs = (j.records || []).slice(0, 8);
       if (!recs.length) { featWrap.hidden = true; return; }
 
       slides = recs;
@@ -212,9 +214,7 @@
       featDots.innerHTML  = recs.map((_,i)=>`<button class="dot ${i===0?'active':''}" data-i="${i}" aria-label="Slide ${i+1}"></button>`).join('');
       featWrap.hidden = false;
 
-      // resolve gambar DINAMIS
       wireImageResolver(featTrack);
-
       recs.forEach(it => observeQuotaForId(it.id));
 
       featPrev.onclick = ()=> go(current-1);
@@ -275,12 +275,13 @@
     const dateStr   = [fmtDate(startDate), fmtDate(endDate)].filter(Boolean).join(' — ');
     const plainDesc = (description || '').replace(/<[^>]+>/g,'');
     const desc      = plainDesc.length > 160 ? (plainDesc.slice(0,160) + '…') : plainDesc;
+    const sfUrl     = record.promoImageUrl || record.imageUrl || '';
 
     return `
     <article class="card" data-campaign="${id}">
       <div class="thumb">
         <img src="${IMG_PLACEHOLDER}" alt="${name}" loading="lazy" decoding="async" width="640" height="360"
-             onerror="this.onerror=null;this.src='${IMG_FALLBACK}'">
+             data-sf-public="${sfUrl}">
         <div class="badges-left">
           ${discountPercent!=null ? `<span class="badge badge-sale">${discountPercent}% OFF</span>` : ''}
           ${category ? `<span class="badge badge-cat">${category}</span>` : ''}

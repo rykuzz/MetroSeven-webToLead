@@ -21,6 +21,13 @@
   const featPrev  = $("#featPrev");
   const featNext  = $("#featNext");
 
+  // ===== Konstanta gambar =====
+  const IMG_PLACEHOLDER = 'assets/images/promo-placeholder.jpg';
+  const IMG_FALLBACK    = 'https://placehold.co/640x360?text=Promo';
+
+  // ===== Cache URL public link per Campaign =====
+  const imageUrlCache = new Map();
+
   // state (no sort)
   let state = { q:"", status:"active", category:"all", page:1, limit:12, total:0 };
 
@@ -91,6 +98,66 @@
     return null;
   }
 
+  // ======= Image resolver (DINAMIS dari SF – JSON public link) =======
+  async function fetchPromoImageUrl(campaignId){
+    if (imageUrlCache.has(campaignId)) return imageUrlCache.get(campaignId);
+    try {
+      const r = await fetch(`/api/promo-image?campaignId=${encodeURIComponent(campaignId)}&format=url`, {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success || !j.url) throw new Error(j.message || 'No image URL');
+      imageUrlCache.set(campaignId, j.url);
+      return j.url;
+    } catch (e) {
+      // cache negatif agar tidak spam request
+      imageUrlCache.set(campaignId, null);
+      return null;
+    }
+  }
+  function applyImgFallback(img){
+    img.onerror = null;
+    img.src = IMG_PLACEHOLDER;
+    // jika placeholder lokal tidak ada, jatuhkan ke CDN placeholder
+    img.addEventListener('error', () => { img.src = IMG_FALLBACK; }, { once:true });
+  }
+  async function resolveHolderImage(holder){
+    const id  = holder.dataset.campaign;
+    const img = holder.querySelector('img');
+    if (!id || !img) return;
+    // kalau sudah pernah resolve, skip
+    if (img.dataset.resolved === '1') return;
+
+    const url = await fetchPromoImageUrl(id);
+    if (url) {
+      img.src = url;
+      img.removeAttribute('srcset'); // hindari browser tetap pakai srcset lama
+      img.dataset.resolved = '1';
+    } else {
+      applyImgFallback(img);
+      img.dataset.resolved = '1';
+    }
+  }
+  const ioImg = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (en.isIntersecting) {
+        resolveHolderImage(en.target);
+        ioImg.unobserve(en.target);
+      }
+    });
+  }, { root: null, rootMargin: '200px', threshold: 0.01 });
+
+  function wireImageResolver(scope=document){
+    // observe semua kartu/slide yang punya data-campaign
+    scope.querySelectorAll('.card[data-campaign], .slide[data-campaign]').forEach(el => {
+      // set sementara placeholder jika belum ada
+      const img = el.querySelector('img');
+      if (img && !img.getAttribute('src')) img.src = IMG_PLACEHOLDER;
+      ioImg.observe(el);
+    });
+  }
+
   // ===== Featured Carousel =====
   let slides = [];
   let current = 0;
@@ -98,14 +165,16 @@
   const AUTO_INTERVAL = 5000;
 
   function buildSlide(rec){
-    const img = rec.imageUrl || 'assets/images/promo-placeholder.jpg';
+    // awalnya pakai placeholder; nanti di-resolve via wireImageResolver()
+    const img = IMG_PLACEHOLDER;
     const dateStr = [fmtDate(rec.startDate), fmtDate(rec.endDate)].filter(Boolean).join(' — ');
     const priceStr = rec.price!=null ? rupiah(rec.price) : '';
     const discountStr = rec.discountPercent!=null ? `${rec.discountPercent}% OFF` : '';
 
     return `
     <div class="slide" data-campaign="${rec.id}" role="option" aria-label="${rec.name}" tabindex="0">
-      <img src="${img}" alt="${rec.name}" loading="lazy" decoding="async" width="1280" height="720">
+      <img src="${img}" alt="${rec.name}" loading="lazy" decoding="async" width="1280" height="720"
+           onerror="this.onerror=null;this.src='${IMG_FALLBACK}'">
       <div class="badges-left">
         ${discountStr ? `<span class="badge badge-sale">${discountStr}</span>` : ''}
         ${rec.category ? `<span class="badge badge-cat">${rec.category}</span>` : ''}
@@ -133,7 +202,7 @@
       if (!r.ok) throw new Error(j.message || 'Gagal ambil featured');
 
       const recs = (j.records || [])
-        .filter(x => x.imageUrl || x.priority != null)
+        .filter(x => true) // tampilkan semua; gambar tetap di-resolve dinamis
         .slice(0, 8);
 
       if (!recs.length) { featWrap.hidden = true; return; }
@@ -142,6 +211,9 @@
       featTrack.innerHTML = recs.map(buildSlide).join('');
       featDots.innerHTML  = recs.map((_,i)=>`<button class="dot ${i===0?'active':''}" data-i="${i}" aria-label="Slide ${i+1}"></button>`).join('');
       featWrap.hidden = false;
+
+      // resolve gambar DINAMIS
+      wireImageResolver(featTrack);
 
       recs.forEach(it => observeQuotaForId(it.id));
 
@@ -199,21 +271,16 @@
   }
 
   function card(record){
-    const { id, name, description, imageUrl, startDate, endDate, status, category, price, discountPercent } = record;
+    const { id, name, description, startDate, endDate, status, category, price, discountPercent } = record;
     const dateStr   = [fmtDate(startDate), fmtDate(endDate)].filter(Boolean).join(' — ');
     const plainDesc = (description || '').replace(/<[^>]+>/g,'');
     const desc      = plainDesc.length > 160 ? (plainDesc.slice(0,160) + '…') : plainDesc;
-    const img       = imageUrl || 'assets/images/promo-placeholder.jpg';
-
-    const showStatus = status && status.toLowerCase() !== 'planned';
-    const statusHtml = showStatus ? `<span class="status ${'st-'+status.toLowerCase().replace(/\s+/g,'-')}">${status}</span>` : '';
 
     return `
     <article class="card" data-campaign="${id}">
       <div class="thumb">
-        <img src="${img}" alt="${name}" loading="lazy" decoding="async" width="640" height="360"
-             srcset="${img} 640w, ${img} 960w, ${img} 1280w"
-             sizes="(max-width:640px) 100vw, (max-width:980px) 50vw, 33vw">
+        <img src="${IMG_PLACEHOLDER}" alt="${name}" loading="lazy" decoding="async" width="640" height="360"
+             onerror="this.onerror=null;this.src='${IMG_FALLBACK}'">
         <div class="badges-left">
           ${discountPercent!=null ? `<span class="badge badge-sale">${discountPercent}% OFF</span>` : ''}
           ${category ? `<span class="badge badge-cat">${category}</span>` : ''}
@@ -229,7 +296,8 @@
         <div class="cta">
           <div class="pricing">
             ${priceBlock(price, discountPercent)}
-            ${statusHtml}
+            ${status && status.toLowerCase() !== 'planned'
+              ? `<span class="status ${'st-'+status.toLowerCase().replace(/\s+/g,'-')}">${status}</span>` : ''}
           </div>
           <div class="actions">
             <button class="btn btn-primary" type="button" data-register data-campaign="${id}" data-name="${name}">
@@ -287,7 +355,10 @@
       nextBtn.disabled = state.page >= maxPage || !j.hasMore;
 
       msgEl.textContent = "";
+
+      // kuota & gambar dinamis
       items.forEach(it => observeQuotaForId(it.id));
+      wireImageResolver(grid);
 
     } catch (e) {
       if (e.name === 'AbortError') return;
@@ -526,4 +597,3 @@
     validateForm(); // set initial state tombol
   })();
 })();
-

@@ -136,3 +136,54 @@ p { color: var(--text-light); }
 .scroll-to-top { position: fixed; bottom: 20px; right: 20px; width: 45px; height: 45px; background: var(--accent-primary); color: white; border: none; border-radius: 50%; cursor: pointer; opacity: 0; visibility: hidden; transition: all 0.3s ease; z-index: 1000; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; }
 .scroll-to-top.visible { opacity: 1; visibility: visible; }
 .scroll-to-top:hover { background-color: #553c9a; }
+
+/* ===== Sambutan Rektor ===== */
+#sambutan {
+  padding: 80px 0;
+  background-color: var(--primary-bg);
+}
+.sambutan .section-header { margin-bottom: 24px; }
+
+.video-wrapper {
+  position: relative;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+#sambutanVideo {
+  width: 100%;
+  max-width: 960px;
+  aspect-ratio: 16/9;
+  display: block;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: #000; /* canvas hitam saat loading */
+  box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+  outline: none;
+}
+
+#sambutanVideo:focus-visible {
+  box-shadow: 0 0 0 4px #E9D8FD;
+  border-color: var(--accent-primary);
+}
+
+.video-controls {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Responsive kecil */
+@media (max-width: 1024px) {
+  #sambutan { padding: 64px 0; }
+  #sambutanVideo { border-radius: 14px; }
+}
+@media (max-width: 768px) {
+  #sambutan { padding: 56px 0; }
+  #sambutanVideo { border-radius: 12px; }
+}
+@media (max-width: 480px) {
+  #sambutan { padding: 48px 0; }
+  #sambutanVideo { border-radius: 10px; }
+}

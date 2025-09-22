@@ -59,6 +59,30 @@
         </div>
     </section>
 
+    <!-- ===== Kata Sambutan Rektor (baru) ===== -->
+    <section id="sambutan" class="sambutan-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">Sambutan</span>
+                <h2 class="section-title">Kata Sambutan Rektor</h2>
+                <p class="section-subtitle">Selamat datang di Metro Seven University — mari mulai perjalanan akademik Anda bersama kami.</p>
+            </div>
+            <div class="sambutan-video-wrap">
+                <video
+                    class="sambutan-video"
+                    autoplay
+                    muted
+                    loop
+                    controls
+                    playsinline
+                >
+                    <source src="assets/images/Sambutan_Rektor_Metro_Seven_University.mp4" type="video/mp4">
+                    Browser Anda tidak mendukung pemutaran video.
+                </video>
+            </div>
+        </div>
+    </section>
+
     <section id="programs" class="programs">
         <div class="container">
             <div class="section-header">
@@ -206,5 +230,17 @@
     <script src="js/main.js"></script>
     <script src="js/contact.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Opsional: unmute saat user berinteraksi -->
+    <script>
+      // Banyak browser hanya izinkan autoplay jika muted.
+      // Kode ini akan unmute setelah ada interaksi user (tap/klik) pertama.
+      (function(){
+        const v = document.querySelector('.sambutan-video');
+        if (!v) return;
+        function tryUnmute(){ v.muted = false; document.removeEventListener('click', tryUnmute); }
+        document.addEventListener('click', tryUnmute);
+      })();
+    </script>
 </body>
 </html>

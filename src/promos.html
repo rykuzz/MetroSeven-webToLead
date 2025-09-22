@@ -8,9 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-  <!-- Page CSS -->
   <link rel="stylesheet" href="css/promos.css" />
-  <!-- Base site CSS -->
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/responsive.css">
 </head>
@@ -19,26 +17,26 @@
   <div class="page-bg" aria-hidden="true"></div>
 
   <!-- Navbar inline -->
-  <nav class="navbar">
-    <div class="nav-container">
-      <div class="nav-logo">
-        <img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University Logo" class="logo">
-        <span>Metro Seven</span>
-      </div>
-      <ul class="nav-menu">
-        <li class="nav-item"><a href="index.html#home" class="nav-link">Beranda</a></li>
-        <li class="nav-item"><a href="index.html#programs" class="nav-link">Program</a></li>
-        <li class="nav-item"><a href="index.html#testimonials" class="nav-link">Testimoni</a></li>
-        <li class="nav-item"><a href="index.html#contact" class="nav-link">Kontak</a></li>
-      </ul>
-      <div class="nav-cta">
-        <a href="register.html" target="_blank" class="btn btn-primary">Register</a>
-      </div>
-      <button class="hamburger" aria-label="Buka menu">
-        <span class="bar"></span><span class="bar"></span><span class="bar"></span>
-      </button>
-    </div>
-  </nav>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University Logo" class="logo">
+                <span>Metro Seven</span>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item"><a href="#home" class="nav-link">Beranda</a></li>
+                <li class="nav-item"><a href="#programs" class="nav-link">Program</a></li>
+                <li class="nav-item"><a href="#testimonials" class="nav-link">Testimoni</a></li>
+                <li class="nav-item"><a href="#contact" class="nav-link">Kontak</a></li>
+            </ul>
+            <div class="nav-cta">
+                 <a href="register.html" target="_blank" class="btn btn-primary">Register</a>
+            </div>
+            <div class="hamburger">
+                <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+            </div>
+        </div>
+    </nav>
 
   <main class="container">
     <section class="hero">
@@ -74,14 +72,12 @@
       </div>
     </section>
 
-    <!-- Grid -->
     <section id="grid" class="grid" aria-live="polite">
       <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
       <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
     </section>
 
-    <!-- Pager -->
-    <nav id="pager" class="pager" aria-label="Navigasi halaman promo">
+    <nav id="pager" class="pager">
       <button id="prev" class="btn" disabled aria-label="Halaman sebelumnya">← Sebelumnya</button>
       <span id="pageInfo"></span>
       <button id="next" class="btn" aria-label="Halaman selanjutnya">Selanjutnya →</button>
@@ -90,7 +86,7 @@
     <p id="msg" class="msg" role="status" aria-live="polite"></p>
   </main>
 
-  <!-- Modal Daftar Promo -->
+  <!-- Modal Daftar Promo (Improved UI/UX) -->
   <div id="interestModal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="interest_title">
     <div class="modal-dialog" role="document">
       <button id="interest_close" class="modal-close" aria-label="Tutup">✕</button>
@@ -105,14 +101,14 @@
           <div class="form-row">
             <label for="interest_firstName">Nama Depan *</label>
             <input id="interest_firstName" class="input" placeholder="Contoh: Budi" required
-                   autocomplete="given-name" maxlength="60" />
+                  autocomplete="given-name" maxlength="60" />
             <small id="firstName_msg" class="field-msg error" hidden></small>
           </div>
 
           <div class="form-row">
             <label for="interest_lastName">Nama Belakang *</label>
             <input id="interest_lastName" class="input" placeholder="Contoh: Santoso" required
-                   autocomplete="family-name" maxlength="60" />
+                  autocomplete="family-name" maxlength="60" />
             <small id="lastName_msg" class="field-msg error" hidden></small>
           </div>
         </div>
@@ -120,15 +116,14 @@
         <div class="form-row">
           <label for="interest_email">Email *</label>
           <input id="interest_email" class="input" type="email" placeholder="nama@domain.com" required
-                 autocomplete="email" aria-describedby="email_help email_error" />
+                autocomplete="email" aria-describedby="email_help email_error" />
           <small id="email_help" class="field-msg">Gunakan email aktif (bukan sementara/disposable).</small>
           <small id="email_error" class="field-msg error" hidden></small>
         </div>
 
         <div class="form-row">
           <label for="interest_company">Sekolah / Institusi</label>
-          <input id="interest_company" class="input" placeholder="Contoh: SMA 7 Jakarta / PT ABC"
-                 autocomplete="organization" maxlength="80" />
+          <input id="interest_company" class="input" placeholder="Contoh: SMA 7 Jakarta / PT ABC" autocomplete="organization" maxlength="80" />
         </div>
 
         <div class="form-row">
@@ -136,7 +131,7 @@
           <div class="phone-input">
             <span class="prefix">+62</span>
             <input id="interest_phone" class="input phone-suffix" type="tel" inputmode="numeric"
-                   placeholder="81234567890" autocomplete="tel-national" maxlength="13" />
+                  placeholder="81234567890" autocomplete="tel-national" maxlength="13" />
           </div>
           <small id="phone_msg" class="field-msg error" hidden></small>
         </div>
@@ -147,28 +142,6 @@
     </div>
   </div>
 
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="footer-container">
-      <div class="footer-top">
-        <div class="footer-brand">
-          <img src="assets/images/Logo-MetroSeven.png" alt="Metro Seven University Logo" class="footer-logo">
-          <div class="footer-title">Metro Seven University</div>
-        </div>
-        <ul class="footer-links">
-          <li><a href="index.html#home">Beranda</a></li>
-          <li><a href="index.html#programs">Program</a></li>
-          <li><a href="index.html#testimonials">Testimoni</a></li>
-          <li><a href="index.html#contact">Kontak</a></li>
-        </ul>
-      </div>
-      <div class="footer-bottom">
-        <p class="footer-copy">&copy; 2025 Metro Seven University. All rights reserved.</p>
-      </div>
-    </div>
-  </footer>
-
-  <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="js/promos.js"></script>
 </body>

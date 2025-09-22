@@ -21,6 +21,18 @@
   const featPrev  = $("#featPrev");
   const featNext  = $("#featNext");
 
+  // ===== (Opsional) Auto-compact jika viewport pendek =====
+  function applyCompactByViewport(){
+    if (!featWrap) return;
+    const shouldCompact = (window.innerHeight < 750);
+    featWrap.classList.toggle('is-compact', shouldCompact || featWrap.classList.contains('is-compact'));
+  }
+  applyCompactByViewport();
+  window.addEventListener('resize', () => {
+    // jangan override kalau user sudah pasang is-compact manual
+    if (featWrap && !featWrap.dataset.locked) applyCompactByViewport();
+  });
+
   // ===== Konstanta gambar =====
   const IMG_PLACEHOLDER = 'https://placehold.co/640x360?text=Promo';
   const IMG_FALLBACK    = 'https://placehold.co/640x360?text=Promo';
@@ -28,7 +40,7 @@
   // ===== Cache URL public link per Campaign =====
   const imageUrlCache = new Map();
 
-  // ===== State (no sort) =====
+  // ===== State =====
   let state = { q:"", status:"active", category:"all", page:1, limit:12, total:0 };
 
   // Hydrate from URL
@@ -392,7 +404,7 @@
 
   setInterval(()=>{ visibleIds.forEach(id => updateQuota(id)); }, 30000);
 
-  // === Kuota: tampilkan selalu; disable tombol jika penuh ===
+  // === Kuota ===
   async function updateQuota(campaignId){
     const badge = document.querySelector(`[data-quota-for="${campaignId}"]`);
     const holder= document.querySelector(`.card[data-campaign="${campaignId}"]`) || document.querySelector(`.slide[data-campaign="${campaignId}"]`);
@@ -585,7 +597,7 @@
   }
   function releaseFocus(){ focusTrapRemovers.forEach(fn=>fn()); focusTrapRemovers=[]; }
 
-  // init: kategori dinamis + featured + list
+  // init
   (async function init(){
     try{
       const r = await fetch('/api/campaign-categories', { cache:'no-store' });

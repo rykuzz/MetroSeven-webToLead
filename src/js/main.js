@@ -45,5 +45,44 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // ===== Sambutan Video: autoplay (muted) + tombol Play/Pause + unmute on first click =====
+    const video = document.getElementById('sambutanVideo');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+
+    if (video) {
+        // Pastikan autoplay berjalan (browser modern butuh muted)
+        video.autoplay = true;
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        // Sync label tombol saat siap
+        video.addEventListener('play', () => {
+            if (playPauseBtn) playPauseBtn.textContent = 'Pause';
+        });
+        video.addEventListener('pause', () => {
+            if (playPauseBtn) playPauseBtn.textContent = 'Play';
+        });
+
+        // Unmute setelah interaksi pertama pengguna (kebijakan autoplay)
+        const tryUnmute = () => {
+            // Hanya unmute jika user memang mau mendengar; lakukan play() agar tidak pause setelah unmute
+            video.muted = false;
+            video.play().catch(() => {}); // abaikan jika gagal
+            document.removeEventListener('click', tryUnmute);
+        };
+        document.addEventListener('click', tryUnmute, { once: true });
+
+        // Tombol Play/Pause custom (opsional, selain controls native)
+        if (playPauseBtn) {
+            playPauseBtn.addEventListener('click', () => {
+                if (video.paused) {
+                    video.play().catch(() => {});
+                } else {
+                    video.pause();
+                }
+            });
+        }
+    }
+
     console.log('Metro Seven University website loaded successfully!');
 });

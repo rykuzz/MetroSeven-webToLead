@@ -28,10 +28,10 @@
   // ===== Cache URL public link per Campaign =====
   const imageUrlCache = new Map();
 
-  // state (no sort)
+  // ===== State (no sort) =====
   let state = { q:"", status:"active", category:"all", page:1, limit:12, total:0 };
 
-  // hydrate from URL
+  // Hydrate from URL
   try {
     const usp = new URLSearchParams(location.search);
     if (usp.has('q')) state.q = qEl.value = usp.get('q') || "";
@@ -40,6 +40,7 @@
     if (usp.has('page')) state.page = Math.max(1, parseInt(usp.get('page')||'1',10));
   } catch {}
 
+  // ===== Utils =====
   const rupiah  = v => v==null ? null : new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(v);
   const fmtDate = d => d ? new Date(d).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}) : null;
 
@@ -58,7 +59,7 @@
       .catch(() => Swal.fire({icon:'error', title:'Gagal menyalin'}));
   }
 
-  // ===== Validation helpers =====
+  // ===== Validation =====
   function validateEmailStrict(email) {
     const e = String(email || '').trim();
     const basic = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -126,7 +127,7 @@
     if (!id || !img) return;
     if (img.dataset.resolved === '1') return;
 
-    const fieldUrl = img.dataset.sfPublic || null; // dari field Campaign (Promo_Image_URL__c)
+    const fieldUrl = img.dataset.sfPublic || img.getAttribute('data-sf-public') || null;
 
     if (fieldUrl) {
       let triedFallback = false;
@@ -504,9 +505,7 @@
     submitBtn.disabled = !ok;
     return ok;
   }
-  [firstNameEl, lastNameEl, emailEl, phoneEl].forEach(el=>{
-    el.addEventListener('input', validateForm);
-  });
+  [firstNameEl, lastNameEl, emailEl, phoneEl].forEach(el=> el.addEventListener('input', validateForm));
 
   // submit
   document.getElementById('interest_form').addEventListener('submit', async (ev)=>{
@@ -533,10 +532,14 @@
     };
 
     try {
-      submitBtn.disabled = true; submitBtn.classList.add('is-loading'); submitBtn.textContent = 'Mengirim…';
+      submitBtn.disabled = true;
+      submitBtn.classList.add('is-loading');
+      submitBtn.textContent = 'Mengirim…';
 
       const r = await fetch('/api/lead-interest', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
       });
       const ct = r.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await r.json() : { message: await r.text() };
@@ -557,7 +560,8 @@
       console.error(e);
       Swal.fire({icon:'error', title:'Gagal', text: e.message || 'Terjadi kesalahan. Coba lagi.'});
     } finally {
-      submitBtn.classList.remove('is-loading'); submitBtn.textContent = 'Kirim';
+      submitBtn.classList.remove('is-loading');
+      submitBtn.textContent = 'Kirim';
       submitBtn.disabled = !validateForm();
     }
   });
@@ -595,6 +599,6 @@
     }catch(e){ console.warn('Gagal memuat kategori', e.message); }
     await loadFeatured();
     await load();
-    validateForm(); // set initial state tombol
+    validateForm(); // initial state tombol
   })();
 })();
